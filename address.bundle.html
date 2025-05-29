@@ -1,0 +1,2665 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Tari Address Generator</title>
+
+    <style>
+        body { font-family: sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
+        .container { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        h1 { color: #BF4A8A; } /* Tari Purple */
+        label { display: block; margin-top: 10px; font-weight: bold; }
+        input[type="text"], textarea, select {
+            width: calc(100% - 22px);
+            padding: 10px;
+            margin-top: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        textarea { resize: vertical; min-height: 80px; }
+        button {
+            background-color: #FF6B00; /* Tari Orange */
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 20px;
+            margin-right: 10px;
+        }
+        button:hover:not(:disabled) { background-color: #E05A00; }
+        button:disabled { 
+            background-color: #ccc; 
+            cursor: not-allowed; 
+            opacity: 0.6;
+        }
+        .output-group { margin-top: 15px; }
+        .output-group p {
+            background-color: #e9e9e9;
+            padding: 8px;
+            border-radius: 3px;
+            word-break: break-all;
+        }
+        .error { color: red; margin-top: 10px; }
+        .emoji-output { 
+            font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif; 
+            font-size: 1.2em; 
+            line-height: 1.5; 
+            word-break: break-all; 
+        }
+        .initializing { color: #666; font-style: italic; }
+        .small-text { font-size: 0.8em; color: #666; margin-top: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Tari Address Generator</h1>
+
+        <select id="network">
+            <option value="0" selected>MainNet (0x00)</option>
+            <option value="2">NextNet (0x02)</option>
+            <option value="38">Esmeralda (0x26)</option>
+        </select>
+
+        <label for="seedWords">Seed Words (24 words, English, space-separated):</label>
+        <textarea id="seedWords" rows="3" placeholder="Enter existing seed words to restore, or leave empty to generate new address"></textarea>
+
+        <button id="btnGenerate" disabled>Generate New Address</button>
+        <button id="btnRestore" disabled>Restore From Seed Words</button>
+        
+        <div id="errorMessage" class="error"></div>
+        <div id="initMessage" class="initializing">Initializing address generator...</div>
+
+        <div class="output-group">
+            <label>Private View Key (hex):</label>
+            <input type="text" id="privateViewKeyOutput" readonly>
+        </div>
+        <div class="output-group">
+            <label>Public View Key (hex):</label>
+            <input type="text" id="publicViewKeyOutput" readonly>
+        </div>
+        <div class="output-group">
+            <label>Public Spend Key (hex):</label>
+            <input type="text" id="publicSpendKeyOutput" readonly>
+        </div>
+        <div class="output-group">
+            <label for="paymentId">Payment ID (optional):</label>
+            <input type="text" id="paymentId" placeholder="Enter payment ID to create integrated address">
+            <div class="small-text">Leave empty for standard address. Adding a payment ID creates an integrated address.</div>
+        </div>
+        <div class="output-group">
+            <label>Tari Address (Base58):</label>
+            <input type="text" id="tariAddressOutput" readonly>
+        </div>
+        <div class="output-group">
+            <label>Emoji Address:</label>
+            <textarea id="emojiAddressOutput" readonly rows="3" class="emoji-output"></textarea>
+        </div>
+    </div>
+
+    <script>
+// tari-generator.js
+(function(){"use strict";const ve=typeof globalThis=="object"&&"crypto"in globalThis?globalThis.crypto:void 0;/*! noble-hashes - MIT License (c) 2022 Paul Miller (paulmillr.com) */function Gt(e){return e instanceof Uint8Array||ArrayBuffer.isView(e)&&e.constructor.name==="Uint8Array"}function Ie(e){if(!Number.isSafeInteger(e)||e<0)throw new Error("positive integer expected, got "+e)}function Se(e,...t){if(!Gt(e))throw new Error("Uint8Array expected");if(t.length>0&&!t.includes(e.length))throw new Error("Uint8Array expected of length "+t+", got length="+e.length)}function Ue(e,t=!0){if(e.destroyed)throw new Error("Hash instance has been destroyed");if(t&&e.finished)throw new Error("Hash#digest() has already been called")}function ot(e,t){Se(e);const n=t.outputLen;if(e.length<n)throw new Error("digestInto() expects output buffer of length at least "+n)}function _e(e){return new Uint32Array(e.buffer,e.byteOffset,Math.floor(e.byteLength/4))}function xe(...e){for(let t=0;t<e.length;t++)e[t].fill(0)}function Oe(e){return new DataView(e.buffer,e.byteOffset,e.byteLength)}const it=new Uint8Array(new Uint32Array([287454020]).buffer)[0]===68;function st(e){return e<<24&4278190080|e<<8&16711680|e>>>8&65280|e>>>24&255}const se=it?e=>e:e=>st(e);function $t(e){for(let t=0;t<e.length;t++)e[t]=st(e[t]);return e}const ke=it?e=>e:$t;function Yt(e){if(typeof e!="string")throw new Error("string expected");return new Uint8Array(new TextEncoder().encode(e))}function ye(e){return typeof e=="string"&&(e=Yt(e)),Se(e),e}class at{}function Xt(e){const t=r=>e().update(ye(r)).digest(),n=e();return t.outputLen=n.outputLen,t.blockLen=n.blockLen,t.create=()=>e(),t}function Kt(e){const t=(r,s)=>e(s).update(ye(r)).digest(),n=e({});return t.outputLen=n.outputLen,t.blockLen=n.blockLen,t.create=r=>e(r),t}function Wt(e=32){if(ve&&typeof ve.getRandomValues=="function")return ve.getRandomValues(new Uint8Array(e));if(ve&&typeof ve.randomBytes=="function")return Uint8Array.from(ve.randomBytes(e));throw new Error("crypto.getRandomValues must be defined")}function Pt(e,t,n,r){if(typeof e.setBigUint64=="function")return e.setBigUint64(t,n,r);const s=BigInt(32),o=BigInt(4294967295),a=Number(n>>s&o),l=Number(n&o),i=r?4:0,u=r?0:4;e.setUint32(t+i,a,r),e.setUint32(t+u,l,r)}class Qt extends at{constructor(t,n,r,s){super(),this.finished=!1,this.length=0,this.pos=0,this.destroyed=!1,this.blockLen=t,this.outputLen=n,this.padOffset=r,this.isLE=s,this.buffer=new Uint8Array(t),this.view=Oe(this.buffer)}update(t){Ue(this),t=ye(t),Se(t);const{view:n,buffer:r,blockLen:s}=this,o=t.length;for(let a=0;a<o;){const l=Math.min(s-this.pos,o-a);if(l===s){const i=Oe(t);for(;s<=o-a;a+=s)this.process(i,a);continue}r.set(t.subarray(a,a+l),this.pos),this.pos+=l,a+=l,this.pos===s&&(this.process(n,0),this.pos=0)}return this.length+=t.length,this.roundClean(),this}digestInto(t){Ue(this),ot(t,this),this.finished=!0;const{buffer:n,view:r,blockLen:s,isLE:o}=this;let{pos:a}=this;n[a++]=128,xe(this.buffer.subarray(a)),this.padOffset>s-a&&(this.process(r,0),a=0);for(let f=a;f<s;f++)n[f]=0;Pt(r,s-8,BigInt(this.length*8),o),this.process(r,0);const l=Oe(t),i=this.outputLen;if(i%4)throw new Error("_sha2: outputLen should be aligned to 32bit");const u=i/4,c=this.get();if(u>c.length)throw new Error("_sha2: outputLen bigger than state");for(let f=0;f<u;f++)l.setUint32(4*f,c[f],o)}digest(){const{buffer:t,outputLen:n}=this;this.digestInto(t);const r=t.slice(0,n);return this.destroy(),r}_cloneInto(t){t||(t=new this.constructor),t.set(...this.get());const{blockLen:n,buffer:r,length:s,finished:o,destroyed:a,pos:l}=this;return t.destroyed=a,t.finished=o,t.length=s,t.pos=l,s%n&&t.buffer.set(r),t}clone(){return this._cloneInto()}}const $=Uint32Array.from([1779033703,4089235720,3144134277,2227873595,1013904242,4271175723,2773480762,1595750129,1359893119,2917565137,2600822924,725511199,528734635,4215389547,1541459225,327033209]),ze=BigInt(2**32-1),ct=BigInt(32);function lt(e,t=!1){return t?{h:Number(e&ze),l:Number(e>>ct&ze)}:{h:Number(e>>ct&ze)|0,l:Number(e&ze)|0}}function Jt(e,t=!1){const n=e.length;let r=new Uint32Array(n),s=new Uint32Array(n);for(let o=0;o<n;o++){const{h:a,l}=lt(e[o],t);[r[o],s[o]]=[a,l]}return[r,s]}const ut=(e,t,n)=>e>>>n,ft=(e,t,n)=>e<<32-n|t>>>n,le=(e,t,n)=>e>>>n|t<<32-n,ue=(e,t,n)=>e<<32-n|t>>>n,Ae=(e,t,n)=>e<<64-n|t>>>n-32,Ee=(e,t,n)=>e>>>n-32|t<<64-n,en=(e,t)=>t,tn=(e,t)=>e;function te(e,t,n,r){const s=(t>>>0)+(r>>>0);return{h:e+n+(s/2**32|0)|0,l:s|0}}const je=(e,t,n)=>(e>>>0)+(t>>>0)+(n>>>0),Ce=(e,t,n,r)=>t+n+r+(e/2**32|0)|0,nn=(e,t,n,r)=>(e>>>0)+(t>>>0)+(n>>>0)+(r>>>0),rn=(e,t,n,r,s)=>t+n+r+s+(e/2**32|0)|0,on=(e,t,n,r,s)=>(e>>>0)+(t>>>0)+(n>>>0)+(r>>>0)+(s>>>0),sn=(e,t,n,r,s,o)=>t+n+r+s+o+(e/2**32|0)|0,ht=Jt(["0x428a2f98d728ae22","0x7137449123ef65cd","0xb5c0fbcfec4d3b2f","0xe9b5dba58189dbbc","0x3956c25bf348b538","0x59f111f1b605d019","0x923f82a4af194f9b","0xab1c5ed5da6d8118","0xd807aa98a3030242","0x12835b0145706fbe","0x243185be4ee4b28c","0x550c7dc3d5ffb4e2","0x72be5d74f27b896f","0x80deb1fe3b1696b1","0x9bdc06a725c71235","0xc19bf174cf692694","0xe49b69c19ef14ad2","0xefbe4786384f25e3","0x0fc19dc68b8cd5b5","0x240ca1cc77ac9c65","0x2de92c6f592b0275","0x4a7484aa6ea6e483","0x5cb0a9dcbd41fbd4","0x76f988da831153b5","0x983e5152ee66dfab","0xa831c66d2db43210","0xb00327c898fb213f","0xbf597fc7beef0ee4","0xc6e00bf33da88fc2","0xd5a79147930aa725","0x06ca6351e003826f","0x142929670a0e6e70","0x27b70a8546d22ffc","0x2e1b21385c26c926","0x4d2c6dfc5ac42aed","0x53380d139d95b3df","0x650a73548baf63de","0x766a0abb3c77b2a8","0x81c2c92e47edaee6","0x92722c851482353b","0xa2bfe8a14cf10364","0xa81a664bbc423001","0xc24b8b70d0f89791","0xc76c51a30654be30","0xd192e819d6ef5218","0xd69906245565a910","0xf40e35855771202a","0x106aa07032bbd1b8","0x19a4c116b8d2d0c8","0x1e376c085141ab53","0x2748774cdf8eeb99","0x34b0bcb5e19b48a8","0x391c0cb3c5c95a63","0x4ed8aa4ae3418acb","0x5b9cca4f7763e373","0x682e6ff3d6b2b8a3","0x748f82ee5defb2fc","0x78a5636f43172f60","0x84c87814a1f0ab72","0x8cc702081a6439ec","0x90befffa23631e28","0xa4506cebde82bde9","0xbef9a3f7b2c67915","0xc67178f2e372532b","0xca273eceea26619c","0xd186b8c721c0c207","0xeada7dd6cde0eb1e","0xf57d4f7fee6ed178","0x06f067aa72176fba","0x0a637dc5a2c898a6","0x113f9804bef90dae","0x1b710b35131c471b","0x28db77f523047d84","0x32caab7b40c72493","0x3c9ebe0a15c9bebc","0x431d67c49c100d4c","0x4cc5d4becb3e42b6","0x597f299cfc657e2a","0x5fcb6fab3ad6faec","0x6c44198c4a475817"].map(e=>BigInt(e))),an=ht[0],cn=ht[1],fe=new Uint32Array(80),he=new Uint32Array(80);class ln extends Qt{constructor(t=64){super(128,t,16,!1),this.Ah=$[0]|0,this.Al=$[1]|0,this.Bh=$[2]|0,this.Bl=$[3]|0,this.Ch=$[4]|0,this.Cl=$[5]|0,this.Dh=$[6]|0,this.Dl=$[7]|0,this.Eh=$[8]|0,this.El=$[9]|0,this.Fh=$[10]|0,this.Fl=$[11]|0,this.Gh=$[12]|0,this.Gl=$[13]|0,this.Hh=$[14]|0,this.Hl=$[15]|0}get(){const{Ah:t,Al:n,Bh:r,Bl:s,Ch:o,Cl:a,Dh:l,Dl:i,Eh:u,El:c,Fh:f,Fl:g,Gh:v,Gl:w,Hh:p,Hl:k}=this;return[t,n,r,s,o,a,l,i,u,c,f,g,v,w,p,k]}set(t,n,r,s,o,a,l,i,u,c,f,g,v,w,p,k){this.Ah=t|0,this.Al=n|0,this.Bh=r|0,this.Bl=s|0,this.Ch=o|0,this.Cl=a|0,this.Dh=l|0,this.Dl=i|0,this.Eh=u|0,this.El=c|0,this.Fh=f|0,this.Fl=g|0,this.Gh=v|0,this.Gl=w|0,this.Hh=p|0,this.Hl=k|0}process(t,n){for(let U=0;U<16;U++,n+=4)fe[U]=t.getUint32(n),he[U]=t.getUint32(n+=4);for(let U=16;U<80;U++){const E=fe[U-15]|0,O=he[U-15]|0,H=le(E,O,1)^le(E,O,8)^ut(E,O,7),j=ue(E,O,1)^ue(E,O,8)^ft(E,O,7),d=fe[U-2]|0,_=he[U-2]|0,b=le(d,_,19)^Ae(d,_,61)^ut(d,_,6),I=ue(d,_,19)^Ee(d,_,61)^ft(d,_,6),S=nn(j,I,he[U-7],he[U-16]),z=rn(S,H,b,fe[U-7],fe[U-16]);fe[U]=z|0,he[U]=S|0}let{Ah:r,Al:s,Bh:o,Bl:a,Ch:l,Cl:i,Dh:u,Dl:c,Eh:f,El:g,Fh:v,Fl:w,Gh:p,Gl:k,Hh:N,Hl:L}=this;for(let U=0;U<80;U++){const E=le(f,g,14)^le(f,g,18)^Ae(f,g,41),O=ue(f,g,14)^ue(f,g,18)^Ee(f,g,41),H=f&v^~f&p,j=g&w^~g&k,d=on(L,O,j,cn[U],he[U]),_=sn(d,N,E,H,an[U],fe[U]),b=d|0,I=le(r,s,28)^Ae(r,s,34)^Ae(r,s,39),S=ue(r,s,28)^Ee(r,s,34)^Ee(r,s,39),z=r&o^r&l^o&l,R=s&a^s&i^a&i;N=p|0,L=k|0,p=v|0,k=w|0,v=f|0,w=g|0,{h:f,l:g}=te(u|0,c|0,_|0,b|0),u=l|0,c=i|0,l=o|0,i=a|0,o=r|0,a=s|0;const G=je(b,S,R);r=Ce(G,_,I,z),s=G|0}({h:r,l:s}=te(this.Ah|0,this.Al|0,r|0,s|0)),{h:o,l:a}=te(this.Bh|0,this.Bl|0,o|0,a|0),{h:l,l:i}=te(this.Ch|0,this.Cl|0,l|0,i|0),{h:u,l:c}=te(this.Dh|0,this.Dl|0,u|0,c|0),{h:f,l:g}=te(this.Eh|0,this.El|0,f|0,g|0),{h:v,l:w}=te(this.Fh|0,this.Fl|0,v|0,w|0),{h:p,l:k}=te(this.Gh|0,this.Gl|0,p|0,k|0),{h:N,l:L}=te(this.Hh|0,this.Hl|0,N|0,L|0),this.set(r,s,o,a,l,i,u,c,f,g,v,w,p,k,N,L)}roundClean(){xe(fe,he)}destroy(){xe(this.buffer),this.set(0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0)}}const un=Xt(()=>new ln);/*! noble-curves - MIT License (c) 2022 Paul Miller (paulmillr.com) */const Me=BigInt(0),He=BigInt(1);function Re(e){return e instanceof Uint8Array||ArrayBuffer.isView(e)&&e.constructor.name==="Uint8Array"}function Ze(e){if(!Re(e))throw new Error("Uint8Array expected")}function Fe(e,t){if(typeof t!="boolean")throw new Error(e+" boolean expected, got "+t)}function dt(e){if(typeof e!="string")throw new Error("hex string expected, got "+typeof e);return e===""?Me:BigInt("0x"+e)}const gt=typeof Uint8Array.from([]).toHex=="function"&&typeof Uint8Array.fromHex=="function",fn=Array.from({length:256},(e,t)=>t.toString(16).padStart(2,"0"));function De(e){if(Ze(e),gt)return e.toHex();let t="";for(let n=0;n<e.length;n++)t+=fn[e[n]];return t}const ae={_0:48,_9:57,A:65,F:70,a:97,f:102};function pt(e){if(e>=ae._0&&e<=ae._9)return e-ae._0;if(e>=ae.A&&e<=ae.F)return e-(ae.A-10);if(e>=ae.a&&e<=ae.f)return e-(ae.a-10)}function bt(e){if(typeof e!="string")throw new Error("hex string expected, got "+typeof e);if(gt)return Uint8Array.fromHex(e);const t=e.length,n=t/2;if(t%2)throw new Error("hex string expected, got unpadded hex of length "+t);const r=new Uint8Array(n);for(let s=0,o=0;s<n;s++,o+=2){const a=pt(e.charCodeAt(o)),l=pt(e.charCodeAt(o+1));if(a===void 0||l===void 0){const i=e[o]+e[o+1];throw new Error('hex string expected, got non-hex character "'+i+'" at index '+o)}r[s]=a*16+l}return r}function hn(e){return dt(De(e))}function Ne(e){return Ze(e),dt(De(Uint8Array.from(e).reverse()))}function yt(e,t){return bt(e.toString(16).padStart(t*2,"0"))}function Ve(e,t){return yt(e,t).reverse()}function ce(e,t,n){let r;if(typeof t=="string")try{r=bt(t)}catch(o){throw new Error(e+" must be hex string or Uint8Array, cause: "+o)}else if(Re(t))r=Uint8Array.from(t);else throw new Error(e+" must be hex string or Uint8Array");const s=r.length;if(typeof n=="number"&&s!==n)throw new Error(e+" of length "+n+" expected, got "+s);return r}function wt(...e){let t=0;for(let r=0;r<e.length;r++){const s=e[r];Ze(s),t+=s.length}const n=new Uint8Array(t);for(let r=0,s=0;r<e.length;r++){const o=e[r];n.set(o,s),s+=o.length}return n}const Ge=e=>typeof e=="bigint"&&Me<=e;function dn(e,t,n){return Ge(e)&&Ge(t)&&Ge(n)&&t<=e&&e<n}function Be(e,t,n,r){if(!dn(t,n,r))throw new Error("expected valid "+e+": "+n+" <= n < "+r+", got "+t)}function gn(e){let t;for(t=0;e>Me;e>>=He,t+=1);return t}const $e=e=>(He<<BigInt(e))-He,pn={bigint:e=>typeof e=="bigint",function:e=>typeof e=="function",boolean:e=>typeof e=="boolean",string:e=>typeof e=="string",stringOrUint8Array:e=>typeof e=="string"||Re(e),isSafeInteger:e=>Number.isSafeInteger(e),array:e=>Array.isArray(e),field:(e,t)=>t.Fp.isValid(e),hash:e=>typeof e=="function"&&Number.isSafeInteger(e.outputLen)};function Ye(e,t,n={}){const r=(s,o,a)=>{const l=pn[o];if(typeof l!="function")throw new Error("invalid validator function");const i=e[s];if(!(a&&i===void 0)&&!l(i,e))throw new Error("param "+String(s)+" is invalid. Expected "+o+", got "+i)};for(const[s,o]of Object.entries(t))r(s,o,!1);for(const[s,o]of Object.entries(n))r(s,o,!0);return e}function mt(e){const t=new WeakMap;return(n,...r)=>{const s=t.get(n);if(s!==void 0)return s;const o=e(n,...r);return t.set(n,o),o}}/*! noble-curves - MIT License (c) 2022 Paul Miller (paulmillr.com) */const P=BigInt(0),X=BigInt(1),we=BigInt(2),bn=BigInt(3),vt=BigInt(4),xt=BigInt(5),kt=BigInt(8);function F(e,t){const n=e%t;return n>=P?n:t+n}function ne(e,t,n){let r=e;for(;t-- >P;)r*=r,r%=n;return r}function At(e,t){if(e===P)throw new Error("invert: expected non-zero number");if(t<=P)throw new Error("invert: expected positive modulus, got "+t);let n=F(e,t),r=t,s=P,o=X;for(;n!==P;){const l=r/n,i=r%n,u=s-o*l;r=n,n=i,s=o,o=u}if(r!==X)throw new Error("invert: does not exist");return F(s,t)}function Et(e,t){const n=(e.ORDER+X)/vt,r=e.pow(t,n);if(!e.eql(e.sqr(r),t))throw new Error("Cannot find square root");return r}function yn(e,t){const n=(e.ORDER-xt)/kt,r=e.mul(t,we),s=e.pow(r,n),o=e.mul(t,s),a=e.mul(e.mul(o,we),s),l=e.mul(o,e.sub(a,e.ONE));if(!e.eql(e.sqr(l),t))throw new Error("Cannot find square root");return l}function wn(e){if(e<BigInt(3))throw new Error("sqrt is not defined for small field");let t=e-X,n=0;for(;t%we===P;)t/=we,n++;let r=we;const s=Xe(e);for(;It(s,r)===1;)if(r++>1e3)throw new Error("Cannot find square root: probably non-prime P");if(n===1)return Et;let o=s.pow(r,t);const a=(t+X)/we;return function(i,u){if(i.is0(u))return u;if(It(i,u)!==1)throw new Error("Cannot find square root");let c=n,f=i.mul(i.ONE,o),g=i.pow(u,t),v=i.pow(u,a);for(;!i.eql(g,i.ONE);){if(i.is0(g))return i.ZERO;let w=1,p=i.sqr(g);for(;!i.eql(p,i.ONE);)if(w++,p=i.sqr(p),w===c)throw new Error("Cannot find square root");const k=X<<BigInt(c-w-1),N=i.pow(f,k);c=w,f=i.sqr(N),g=i.mul(g,f),v=i.mul(v,N)}return v}}function mn(e){return e%vt===bn?Et:e%kt===xt?yn:wn(e)}const vn=(e,t)=>(F(e,t)&X)===X,xn=["create","isValid","is0","neg","inv","sqrt","sqr","eql","add","sub","mul","pow","div","addN","subN","mulN","sqrN"];function kn(e){const t={ORDER:"bigint",MASK:"bigint",BYTES:"isSafeInteger",BITS:"isSafeInteger"},n=xn.reduce((r,s)=>(r[s]="function",r),t);return Ye(e,n)}function An(e,t,n){if(n<P)throw new Error("invalid exponent, negatives unsupported");if(n===P)return e.ONE;if(n===X)return t;let r=e.ONE,s=t;for(;n>P;)n&X&&(r=e.mul(r,s)),s=e.sqr(s),n>>=X;return r}function Bt(e,t,n=!1){const r=new Array(t.length).fill(n?e.ZERO:void 0),s=t.reduce((a,l,i)=>e.is0(l)?a:(r[i]=a,e.mul(a,l)),e.ONE),o=e.inv(s);return t.reduceRight((a,l,i)=>e.is0(l)?a:(r[i]=e.mul(a,r[i]),e.mul(a,l)),o),r}function It(e,t){const n=(e.ORDER-X)/we,r=e.pow(t,n),s=e.eql(r,e.ONE),o=e.eql(r,e.ZERO),a=e.eql(r,e.neg(e.ONE));if(!s&&!o&&!a)throw new Error("invalid Legendre symbol result");return s?1:o?0:-1}function St(e,t){t!==void 0&&Ie(t);const n=t!==void 0?t:e.toString(2).length,r=Math.ceil(n/8);return{nBitLength:n,nByteLength:r}}function Xe(e,t,n=!1,r={}){if(e<=P)throw new Error("invalid field: expected ORDER > 0, got "+e);const{nBitLength:s,nByteLength:o}=St(e,t);if(o>2048)throw new Error("invalid field: expected ORDER of <= 2048 bytes");let a;const l=Object.freeze({ORDER:e,isLE:n,BITS:s,BYTES:o,MASK:$e(s),ZERO:P,ONE:X,create:i=>F(i,e),isValid:i=>{if(typeof i!="bigint")throw new Error("invalid field element: expected bigint, got "+typeof i);return P<=i&&i<e},is0:i=>i===P,isOdd:i=>(i&X)===X,neg:i=>F(-i,e),eql:(i,u)=>i===u,sqr:i=>F(i*i,e),add:(i,u)=>F(i+u,e),sub:(i,u)=>F(i-u,e),mul:(i,u)=>F(i*u,e),pow:(i,u)=>An(l,i,u),div:(i,u)=>F(i*At(u,e),e),sqrN:i=>i*i,addN:(i,u)=>i+u,subN:(i,u)=>i-u,mulN:(i,u)=>i*u,inv:i=>At(i,e),sqrt:r.sqrt||(i=>(a||(a=mn(e)),a(l,i))),toBytes:i=>n?Ve(i,o):yt(i,o),fromBytes:i=>{if(i.length!==o)throw new Error("Field.fromBytes: expected "+o+" bytes, got "+i.length);return n?Ne(i):hn(i)},invertBatch:i=>Bt(l,i),cmov:(i,u,c)=>c?u:i});return Object.freeze(l)}/*! noble-curves - MIT License (c) 2022 Paul Miller (paulmillr.com) */const Ut=BigInt(0),Ke=BigInt(1);function We(e,t){const n=t.negate();return e?n:t}function _t(e,t){if(!Number.isSafeInteger(e)||e<=0||e>t)throw new Error("invalid window size, expected [1.."+t+"], got W="+e)}function Pe(e,t){_t(e,t);const n=Math.ceil(t/e)+1,r=2**(e-1),s=2**e,o=$e(e),a=BigInt(e);return{windows:n,windowSize:r,mask:o,maxNumber:s,shiftBy:a}}function zt(e,t,n){const{windowSize:r,mask:s,maxNumber:o,shiftBy:a}=n;let l=Number(e&s),i=e>>a;l>r&&(l-=o,i+=Ke);const u=t*r,c=u+Math.abs(l)-1,f=l===0,g=l<0,v=t%2!==0;return{nextN:i,offset:c,isZero:f,isNeg:g,isNegF:v,offsetF:u}}function En(e,t){if(!Array.isArray(e))throw new Error("array expected");e.forEach((n,r)=>{if(!(n instanceof t))throw new Error("invalid point at index "+r)})}function Bn(e,t){if(!Array.isArray(e))throw new Error("array of scalars expected");e.forEach((n,r)=>{if(!t.isValid(n))throw new Error("invalid scalar at index "+r)})}const Qe=new WeakMap,Nt=new WeakMap;function Je(e){return Nt.get(e)||1}function In(e,t){return{constTimeNegate:We,hasPrecomputes(n){return Je(n)!==1},unsafeLadder(n,r,s=e.ZERO){let o=n;for(;r>Ut;)r&Ke&&(s=s.add(o)),o=o.double(),r>>=Ke;return s},precomputeWindow(n,r){const{windows:s,windowSize:o}=Pe(r,t),a=[];let l=n,i=l;for(let u=0;u<s;u++){i=l,a.push(i);for(let c=1;c<o;c++)i=i.add(l),a.push(i);l=i.double()}return a},wNAF(n,r,s){let o=e.ZERO,a=e.BASE;const l=Pe(n,t);for(let i=0;i<l.windows;i++){const{nextN:u,offset:c,isZero:f,isNeg:g,isNegF:v,offsetF:w}=zt(s,i,l);s=u,f?a=a.add(We(v,r[w])):o=o.add(We(g,r[c]))}return{p:o,f:a}},wNAFUnsafe(n,r,s,o=e.ZERO){const a=Pe(n,t);for(let l=0;l<a.windows&&s!==Ut;l++){const{nextN:i,offset:u,isZero:c,isNeg:f}=zt(s,l,a);if(s=i,!c){const g=r[u];o=o.add(f?g.negate():g)}}return o},getPrecomputes(n,r,s){let o=Qe.get(r);return o||(o=this.precomputeWindow(r,n),n!==1&&Qe.set(r,s(o))),o},wNAFCached(n,r,s){const o=Je(n);return this.wNAF(o,this.getPrecomputes(o,n,s),r)},wNAFCachedUnsafe(n,r,s,o){const a=Je(n);return a===1?this.unsafeLadder(n,r,o):this.wNAFUnsafe(a,this.getPrecomputes(a,n,s),r,o)},setWindowSize(n,r){_t(r,t),Nt.set(n,r),Qe.delete(n)}}}function Sn(e,t,n,r){En(n,e),Bn(r,t);const s=n.length,o=r.length;if(s!==o)throw new Error("arrays of points and scalars must have equal length");const a=e.ZERO,l=gn(BigInt(s));let i=1;l>12?i=l-3:l>4?i=l-2:l>0&&(i=2);const u=$e(i),c=new Array(Number(u)+1).fill(a),f=Math.floor((t.BITS-1)/i)*i;let g=a;for(let v=f;v>=0;v-=i){c.fill(a);for(let p=0;p<o;p++){const k=r[p],N=Number(k>>BigInt(v)&u);c[N]=c[N].add(n[p])}let w=a;for(let p=c.length-1,k=a;p>0;p--)k=k.add(c[p]),w=w.add(k);if(g=g.add(w),v!==0)for(let p=0;p<i;p++)g=g.double()}return g}function Un(e){return kn(e.Fp),Ye(e,{n:"bigint",h:"bigint",Gx:"field",Gy:"field"},{nBitLength:"isSafeInteger",nByteLength:"isSafeInteger"}),Object.freeze({...St(e.n,e.nBitLength),...e,p:e.Fp.ORDER})}/*! noble-curves - MIT License (c) 2022 Paul Miller (paulmillr.com) */const re=BigInt(0),K=BigInt(1),qt=BigInt(2),_n=BigInt(8),zn={zip215:!0};function Nn(e){const t=Un(e);return Ye(e,{hash:"function",a:"bigint",d:"bigint",randomBytes:"function"},{adjustScalarBytes:"function",domain:"function",uvRatio:"function",mapToCurve:"function"}),Object.freeze({...t})}function qn(e){const t=Nn(e),{Fp:n,n:r,prehash:s,hash:o,randomBytes:a,nByteLength:l,h:i}=t,u=qt<<BigInt(l*8)-K,c=n.create,f=Xe(t.n,t.nBitLength);function g(A,h){const m=n.sqr(A),x=n.sqr(h),B=n.add(n.mul(t.a,m),x),q=n.add(n.ONE,n.mul(t.d,n.mul(m,x)));return n.eql(B,q)}if(!g(t.Gx,t.Gy))throw new Error("bad curve params: generator point");const v=t.uvRatio||((A,h)=>{try{return{isValid:!0,value:n.sqrt(A*n.inv(h))}}catch{return{isValid:!1,value:re}}}),w=t.adjustScalarBytes||(A=>A),p=t.domain||((A,h,m)=>{if(Fe("phflag",m),h.length||m)throw new Error("Contexts/pre-hash are not supported");return A});function k(A,h,m=!1){const x=m?K:re;Be("coordinate "+A,h,x,u)}function N(A){if(!(A instanceof E))throw new Error("ExtendedPoint expected")}const L=mt((A,h)=>{const{ex:m,ey:x,ez:B}=A,q=A.is0();h==null&&(h=q?_n:n.inv(B));const M=c(m*h),V=c(x*h),C=c(B*h);if(q)return{x:re,y:K};if(C!==K)throw new Error("invZ was invalid");return{x:M,y:V}}),U=mt(A=>{const{a:h,d:m}=t;if(A.is0())throw new Error("bad point: ZERO");const{ex:x,ey:B,ez:q,et:M}=A,V=c(x*x),C=c(B*B),Z=c(q*q),Y=c(Z*Z),J=c(V*h),oe=c(Z*c(J+C)),ie=c(Y+c(m*c(V*C)));if(oe!==ie)throw new Error("bad point: equation left != right (1)");const ee=c(x*B),be=c(q*M);if(ee!==be)throw new Error("bad point: equation left != right (2)");return!0});class E{constructor(h,m,x,B){k("x",h),k("y",m),k("z",x,!0),k("t",B),this.ex=h,this.ey=m,this.ez=x,this.et=B,Object.freeze(this)}get x(){return this.toAffine().x}get y(){return this.toAffine().y}static fromAffine(h){if(h instanceof E)throw new Error("extended point not allowed");const{x:m,y:x}=h||{};return k("x",m),k("y",x),new E(m,x,K,c(m*x))}static normalizeZ(h){const m=Bt(n,h.map(x=>x.ez));return h.map((x,B)=>x.toAffine(m[B])).map(E.fromAffine)}static msm(h,m){return Sn(E,f,h,m)}_setWindowSize(h){j.setWindowSize(this,h)}assertValidity(){U(this)}equals(h){N(h);const{ex:m,ey:x,ez:B}=this,{ex:q,ey:M,ez:V}=h,C=c(m*V),Z=c(q*B),Y=c(x*V),J=c(M*B);return C===Z&&Y===J}is0(){return this.equals(E.ZERO)}negate(){return new E(c(-this.ex),this.ey,this.ez,c(-this.et))}double(){const{a:h}=t,{ex:m,ey:x,ez:B}=this,q=c(m*m),M=c(x*x),V=c(qt*c(B*B)),C=c(h*q),Z=m+x,Y=c(c(Z*Z)-q-M),J=C+M,oe=J-V,ie=C-M,ee=c(Y*oe),be=c(J*ie),me=c(Y*ie),Le=c(oe*J);return new E(ee,be,Le,me)}add(h){N(h);const{a:m,d:x}=t,{ex:B,ey:q,ez:M,et:V}=this,{ex:C,ey:Z,ez:Y,et:J}=h,oe=c(B*C),ie=c(q*Z),ee=c(V*x*J),be=c(M*Y),me=c((B+q)*(C+Z)-oe-ie),Le=be-ee,Dt=be+ee,Vt=c(ie-m*oe),hr=c(me*Le),dr=c(Dt*Vt),gr=c(me*Vt),pr=c(Le*Dt);return new E(hr,dr,pr,gr)}subtract(h){return this.add(h.negate())}wNAF(h){return j.wNAFCached(this,h,E.normalizeZ)}multiply(h){const m=h;Be("scalar",m,K,r);const{p:x,f:B}=this.wNAF(m);return E.normalizeZ([x,B])[0]}multiplyUnsafe(h,m=E.ZERO){const x=h;return Be("scalar",x,re,r),x===re?H:this.is0()||x===K?this:j.wNAFCachedUnsafe(this,x,E.normalizeZ,m)}isSmallOrder(){return this.multiplyUnsafe(i).is0()}isTorsionFree(){return j.unsafeLadder(this,r).is0()}toAffine(h){return L(this,h)}clearCofactor(){const{h}=t;return h===K?this:this.multiplyUnsafe(h)}static fromHex(h,m=!1){const{d:x,a:B}=t,q=n.BYTES;h=ce("pointHex",h,q),Fe("zip215",m);const M=h.slice(),V=h[q-1];M[q-1]=V&-129;const C=Ne(M),Z=m?u:n.ORDER;Be("pointHex.y",C,re,Z);const Y=c(C*C),J=c(Y-K),oe=c(x*Y-B);let{isValid:ie,value:ee}=v(J,oe);if(!ie)throw new Error("Point.fromHex: invalid y coordinate");const be=(ee&K)===K,me=(V&128)!==0;if(!m&&ee===re&&me)throw new Error("Point.fromHex: x=0 and x_0=1");return me!==be&&(ee=c(-ee)),E.fromAffine({x:ee,y:C})}static fromPrivateKey(h){const{scalar:m}=b(h);return O.multiply(m)}toRawBytes(){const{x:h,y:m}=this.toAffine(),x=Ve(m,n.BYTES);return x[x.length-1]|=h&K?128:0,x}toHex(){return De(this.toRawBytes())}}E.BASE=new E(t.Gx,t.Gy,K,c(t.Gx*t.Gy)),E.ZERO=new E(re,K,K,re);const{BASE:O,ZERO:H}=E,j=In(E,l*8);function d(A){return F(A,r)}function _(A){return d(Ne(A))}function b(A){const h=n.BYTES;A=ce("private key",A,h);const m=ce("hashed private key",o(A),2*h),x=w(m.slice(0,h)),B=m.slice(h,2*h),q=_(x);return{head:x,prefix:B,scalar:q}}function I(A){const{head:h,prefix:m,scalar:x}=b(A),B=O.multiply(x),q=B.toRawBytes();return{head:h,prefix:m,scalar:x,point:B,pointBytes:q}}function S(A){return I(A).pointBytes}function z(A=Uint8Array.of(),...h){const m=wt(...h);return _(o(p(m,ce("context",A),!!s)))}function R(A,h,m={}){A=ce("message",A),s&&(A=s(A));const{prefix:x,scalar:B,pointBytes:q}=I(h),M=z(m.context,x,A),V=O.multiply(M).toRawBytes(),C=z(m.context,V,q,A),Z=d(M+C*B);Be("signature.s",Z,re,r);const Y=wt(V,Ve(Z,n.BYTES));return ce("result",Y,n.BYTES*2)}const G=zn;function W(A,h,m,x=G){const{context:B,zip215:q}=x,M=n.BYTES;A=ce("signature",A,2*M),h=ce("message",h),m=ce("publicKey",m,M),q!==void 0&&Fe("zip215",q),s&&(h=s(h));const V=Ne(A.slice(M,2*M));let C,Z,Y;try{C=E.fromHex(m,q),Z=E.fromHex(A.slice(0,M),q),Y=O.multiplyUnsafe(V)}catch{return!1}if(!q&&C.isSmallOrder())return!1;const J=z(B,Z.toRawBytes(),C.toRawBytes(),h);return Z.add(C.multiplyUnsafe(J)).subtract(Y).clearCofactor().equals(E.ZERO)}return O._setWindowSize(8),{CURVE:t,getPublicKey:S,sign:R,verify:W,ExtendedPoint:E,utils:{getExtendedPublicKey:I,randomPrivateKey:()=>a(n.BYTES),precompute(A=8,h=E.BASE){return h._setWindowSize(A),h.multiply(BigInt(3)),h}}}}/*! noble-curves - MIT License (c) 2022 Paul Miller (paulmillr.com) */const et=BigInt("57896044618658097711785492504343953926634992332820282019728792003956564819949"),Tt=BigInt("19681161376707505956807079304988542015446066515923890162744021073123829784752");BigInt(0);const Tn=BigInt(1),Lt=BigInt(2);BigInt(3);const Ln=BigInt(5),On=BigInt(8);function jn(e){const t=BigInt(10),n=BigInt(20),r=BigInt(40),s=BigInt(80),o=et,l=e*e%o*e%o,i=ne(l,Lt,o)*l%o,u=ne(i,Tn,o)*e%o,c=ne(u,Ln,o)*u%o,f=ne(c,t,o)*c%o,g=ne(f,n,o)*f%o,v=ne(g,r,o)*g%o,w=ne(v,s,o)*v%o,p=ne(w,s,o)*v%o,k=ne(p,t,o)*c%o;return{pow_p_5_8:ne(k,Lt,o)*e%o,b2:l}}function Cn(e){return e[0]&=248,e[31]&=127,e[31]|=64,e}function Mn(e,t){const n=et,r=F(t*t*t,n),s=F(r*r*t,n),o=jn(e*s).pow_p_5_8;let a=F(e*r*o,n);const l=F(t*a*a,n),i=a,u=F(a*Tt,n),c=l===e,f=l===F(-e,n),g=l===F(-e*Tt,n);return c&&(a=i),(f||g)&&(a=u),vn(a,n)&&(a=F(-a,n)),{isValid:c||f,value:a}}const Ot=Xe(et,void 0,!0),Hn={a:Ot.create(BigInt(-1)),d:BigInt("37095705934669439343138083508754565189542113879843219016388785533085940283555"),Fp:Ot,n:BigInt("7237005577332262213973186563042994240857116359379907606001950938285454250989"),h:On,Gx:BigInt("15112221349535400772501151409588531511454012693041857206046113283949847762202"),Gy:BigInt("46316835694926478169428394003475163141307993866256225615783033603165251855960"),hash:un,randomBytes:Wt,adjustScalarBytes:Cn,uvRatio:Mn},jt=qn(Hn),Rn=Uint8Array.from([0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,14,10,4,8,9,15,13,6,1,12,0,2,11,7,5,3,11,8,12,0,5,2,15,13,10,14,3,6,7,1,9,4,7,9,3,1,13,12,11,14,2,6,5,10,4,0,15,8,9,0,5,7,2,4,10,15,14,1,11,12,6,8,3,13,2,12,6,10,0,11,8,3,4,13,7,5,15,14,1,9,12,5,1,15,14,13,4,10,0,7,6,3,9,2,8,11,13,11,7,14,12,1,3,9,5,0,15,4,8,6,2,10,6,15,14,9,11,3,0,8,12,2,13,7,1,4,10,5,10,2,8,4,7,6,1,5,15,11,9,14,3,12,13,0,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,14,10,4,8,9,15,13,6,1,12,0,2,11,7,5,3,11,8,12,0,5,2,15,13,10,14,3,6,7,1,9,4,7,9,3,1,13,12,11,14,2,6,5,10,4,0,15,8,9,0,5,7,2,4,10,15,14,1,11,12,6,8,3,13,2,12,6,10,0,11,8,3,4,13,7,5,15,14,1,9]),D=Uint32Array.from([4089235720,1779033703,2227873595,3144134277,4271175723,1013904242,1595750129,2773480762,2917565137,1359893119,725511199,2600822924,4215389547,528734635,327033209,1541459225]),y=new Uint32Array(32);function de(e,t,n,r,s,o){const a=s[o],l=s[o+1];let i=y[2*e],u=y[2*e+1],c=y[2*t],f=y[2*t+1],g=y[2*n],v=y[2*n+1],w=y[2*r],p=y[2*r+1],k=je(i,c,a);u=Ce(k,u,f,l),i=k|0,{Dh:p,Dl:w}={Dh:p^u,Dl:w^i},{Dh:p,Dl:w}={Dh:en(p,w),Dl:tn(p)},{h:v,l:g}=te(v,g,p,w),{Bh:f,Bl:c}={Bh:f^v,Bl:c^g},{Bh:f,Bl:c}={Bh:le(f,c,24),Bl:ue(f,c,24)},y[2*e]=i,y[2*e+1]=u,y[2*t]=c,y[2*t+1]=f,y[2*n]=g,y[2*n+1]=v,y[2*r]=w,y[2*r+1]=p}function ge(e,t,n,r,s,o){const a=s[o],l=s[o+1];let i=y[2*e],u=y[2*e+1],c=y[2*t],f=y[2*t+1],g=y[2*n],v=y[2*n+1],w=y[2*r],p=y[2*r+1],k=je(i,c,a);u=Ce(k,u,f,l),i=k|0,{Dh:p,Dl:w}={Dh:p^u,Dl:w^i},{Dh:p,Dl:w}={Dh:le(p,w,16),Dl:ue(p,w,16)},{h:v,l:g}=te(v,g,p,w),{Bh:f,Bl:c}={Bh:f^v,Bl:c^g},{Bh:f,Bl:c}={Bh:Ae(f,c,63),Bl:Ee(f,c,63)},y[2*e]=i,y[2*e+1]=u,y[2*t]=c,y[2*t+1]=f,y[2*n]=g,y[2*n+1]=v,y[2*r]=w,y[2*r+1]=p}function Zn(e,t={},n,r,s){if(Ie(n),e<0||e>n)throw new Error("outputLen bigger than keyLen");const{key:o,salt:a,personalization:l}=t;if(o!==void 0&&(o.length<1||o.length>n))throw new Error("key length must be undefined or 1.."+n);if(a!==void 0&&a.length!==r)throw new Error("salt must be undefined or "+r);if(l!==void 0&&l.length!==s)throw new Error("personalization must be undefined or "+s)}class Fn extends at{constructor(t,n){super(),this.finished=!1,this.destroyed=!1,this.length=0,this.pos=0,Ie(t),Ie(n),this.blockLen=t,this.outputLen=n,this.buffer=new Uint8Array(t),this.buffer32=_e(this.buffer)}update(t){Ue(this),t=ye(t),Se(t);const{blockLen:n,buffer:r,buffer32:s}=this,o=t.length,a=t.byteOffset,l=t.buffer;for(let i=0;i<o;){this.pos===n&&(ke(s),this.compress(s,0,!1),ke(s),this.pos=0);const u=Math.min(n-this.pos,o-i),c=a+i;if(u===n&&!(c%4)&&i+u<o){const f=new Uint32Array(l,c,Math.floor((o-i)/4));ke(f);for(let g=0;i+n<o;g+=s.length,i+=n)this.length+=n,this.compress(f,g,!1);ke(f);continue}r.set(t.subarray(i,i+u),this.pos),this.pos+=u,this.length+=u,i+=u}return this}digestInto(t){Ue(this),ot(t,this);const{pos:n,buffer32:r}=this;this.finished=!0,xe(this.buffer.subarray(n)),ke(r),this.compress(r,0,!0),ke(r);const s=_e(t);this.get().forEach((o,a)=>s[a]=se(o))}digest(){const{buffer:t,outputLen:n}=this;this.digestInto(t);const r=t.slice(0,n);return this.destroy(),r}_cloneInto(t){const{buffer:n,length:r,finished:s,destroyed:o,outputLen:a,pos:l}=this;return t||(t=new this.constructor({dkLen:a})),t.set(...this.get()),t.buffer.set(n),t.destroyed=o,t.finished=s,t.length=r,t.pos=l,t.outputLen=a,t}clone(){return this._cloneInto()}}class Dn extends Fn{constructor(t={}){const n=t.dkLen===void 0?64:t.dkLen;super(128,n),this.v0l=D[0]|0,this.v0h=D[1]|0,this.v1l=D[2]|0,this.v1h=D[3]|0,this.v2l=D[4]|0,this.v2h=D[5]|0,this.v3l=D[6]|0,this.v3h=D[7]|0,this.v4l=D[8]|0,this.v4h=D[9]|0,this.v5l=D[10]|0,this.v5h=D[11]|0,this.v6l=D[12]|0,this.v6h=D[13]|0,this.v7l=D[14]|0,this.v7h=D[15]|0,Zn(n,t,64,16,16);let{key:r,personalization:s,salt:o}=t,a=0;if(r!==void 0&&(r=ye(r),a=r.length),this.v0l^=this.outputLen|a<<8|65536|1<<24,o!==void 0){o=ye(o);const l=_e(o);this.v4l^=se(l[0]),this.v4h^=se(l[1]),this.v5l^=se(l[2]),this.v5h^=se(l[3])}if(s!==void 0){s=ye(s);const l=_e(s);this.v6l^=se(l[0]),this.v6h^=se(l[1]),this.v7l^=se(l[2]),this.v7h^=se(l[3])}if(r!==void 0){const l=new Uint8Array(this.blockLen);l.set(r),this.update(l)}}get(){let{v0l:t,v0h:n,v1l:r,v1h:s,v2l:o,v2h:a,v3l:l,v3h:i,v4l:u,v4h:c,v5l:f,v5h:g,v6l:v,v6h:w,v7l:p,v7h:k}=this;return[t,n,r,s,o,a,l,i,u,c,f,g,v,w,p,k]}set(t,n,r,s,o,a,l,i,u,c,f,g,v,w,p,k){this.v0l=t|0,this.v0h=n|0,this.v1l=r|0,this.v1h=s|0,this.v2l=o|0,this.v2h=a|0,this.v3l=l|0,this.v3h=i|0,this.v4l=u|0,this.v4h=c|0,this.v5l=f|0,this.v5h=g|0,this.v6l=v|0,this.v6h=w|0,this.v7l=p|0,this.v7h=k|0}compress(t,n,r){this.get().forEach((i,u)=>y[u]=i),y.set(D,16);let{h:s,l:o}=lt(BigInt(this.length));y[24]=D[8]^o,y[25]=D[9]^s,r&&(y[28]=~y[28],y[29]=~y[29]);let a=0;const l=Rn;for(let i=0;i<12;i++)de(0,4,8,12,t,n+2*l[a++]),ge(0,4,8,12,t,n+2*l[a++]),de(1,5,9,13,t,n+2*l[a++]),ge(1,5,9,13,t,n+2*l[a++]),de(2,6,10,14,t,n+2*l[a++]),ge(2,6,10,14,t,n+2*l[a++]),de(3,7,11,15,t,n+2*l[a++]),ge(3,7,11,15,t,n+2*l[a++]),de(0,5,10,15,t,n+2*l[a++]),ge(0,5,10,15,t,n+2*l[a++]),de(1,6,11,12,t,n+2*l[a++]),ge(1,6,11,12,t,n+2*l[a++]),de(2,7,8,13,t,n+2*l[a++]),ge(2,7,8,13,t,n+2*l[a++]),de(3,4,9,14,t,n+2*l[a++]),ge(3,4,9,14,t,n+2*l[a++]);this.v0l^=y[0]^y[16],this.v0h^=y[1]^y[17],this.v1l^=y[2]^y[18],this.v1h^=y[3]^y[19],this.v2l^=y[4]^y[20],this.v2h^=y[5]^y[21],this.v3l^=y[6]^y[22],this.v3h^=y[7]^y[23],this.v4l^=y[8]^y[24],this.v4h^=y[9]^y[25],this.v5l^=y[10]^y[26],this.v5h^=y[11]^y[27],this.v6l^=y[12]^y[28],this.v6h^=y[13]^y[29],this.v7l^=y[14]^y[30],this.v7h^=y[15]^y[31],xe(y)}destroy(){this.destroyed=!0,xe(this.buffer32),this.set(0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0)}}const Vn=Kt(e=>new Dn(e)),Gn=`abandon
+ability
+able
+about
+above
+absent
+absorb
+abstract
+absurd
+abuse
+access
+accident
+account
+accuse
+achieve
+acid
+acoustic
+acquire
+across
+act
+action
+actor
+actress
+actual
+adapt
+add
+addict
+address
+adjust
+admit
+adult
+advance
+advice
+aerobic
+affair
+afford
+afraid
+again
+age
+agent
+agree
+ahead
+aim
+air
+airport
+aisle
+alarm
+album
+alcohol
+alert
+alien
+all
+alley
+allow
+almost
+alone
+alpha
+already
+also
+alter
+always
+amateur
+amazing
+among
+amount
+amused
+analyst
+anchor
+ancient
+anger
+angle
+angry
+animal
+ankle
+announce
+annual
+another
+answer
+antenna
+antique
+anxiety
+any
+apart
+apology
+appear
+apple
+approve
+april
+arch
+arctic
+area
+arena
+argue
+arm
+armed
+armor
+army
+around
+arrange
+arrest
+arrive
+arrow
+art
+artefact
+artist
+artwork
+ask
+aspect
+assault
+asset
+assist
+assume
+asthma
+athlete
+atom
+attack
+attend
+attitude
+attract
+auction
+audit
+august
+aunt
+author
+auto
+autumn
+average
+avocado
+avoid
+awake
+aware
+away
+awesome
+awful
+awkward
+axis
+baby
+bachelor
+bacon
+badge
+bag
+balance
+balcony
+ball
+bamboo
+banana
+banner
+bar
+barely
+bargain
+barrel
+base
+basic
+basket
+battle
+beach
+bean
+beauty
+because
+become
+beef
+before
+begin
+behave
+behind
+believe
+below
+belt
+bench
+benefit
+best
+betray
+better
+between
+beyond
+bicycle
+bid
+bike
+bind
+biology
+bird
+birth
+bitter
+black
+blade
+blame
+blanket
+blast
+bleak
+bless
+blind
+blood
+blossom
+blouse
+blue
+blur
+blush
+board
+boat
+body
+boil
+bomb
+bone
+bonus
+book
+boost
+border
+boring
+borrow
+boss
+bottom
+bounce
+box
+boy
+bracket
+brain
+brand
+brass
+brave
+bread
+breeze
+brick
+bridge
+brief
+bright
+bring
+brisk
+broccoli
+broken
+bronze
+broom
+brother
+brown
+brush
+bubble
+buddy
+budget
+buffalo
+build
+bulb
+bulk
+bullet
+bundle
+bunker
+burden
+burger
+burst
+bus
+business
+busy
+butter
+buyer
+buzz
+cabbage
+cabin
+cable
+cactus
+cage
+cake
+call
+calm
+camera
+camp
+can
+canal
+cancel
+candy
+cannon
+canoe
+canvas
+canyon
+capable
+capital
+captain
+car
+carbon
+card
+cargo
+carpet
+carry
+cart
+case
+cash
+casino
+castle
+casual
+cat
+catalog
+catch
+category
+cattle
+caught
+cause
+caution
+cave
+ceiling
+celery
+cement
+census
+century
+cereal
+certain
+chair
+chalk
+champion
+change
+chaos
+chapter
+charge
+chase
+chat
+cheap
+check
+cheese
+chef
+cherry
+chest
+chicken
+chief
+child
+chimney
+choice
+choose
+chronic
+chuckle
+chunk
+churn
+cigar
+cinnamon
+circle
+citizen
+city
+civil
+claim
+clap
+clarify
+claw
+clay
+clean
+clerk
+clever
+click
+client
+cliff
+climb
+clinic
+clip
+clock
+clog
+close
+cloth
+cloud
+clown
+club
+clump
+cluster
+clutch
+coach
+coast
+coconut
+code
+coffee
+coil
+coin
+collect
+color
+column
+combine
+come
+comfort
+comic
+common
+company
+concert
+conduct
+confirm
+congress
+connect
+consider
+control
+convince
+cook
+cool
+copper
+copy
+coral
+core
+corn
+correct
+cost
+cotton
+couch
+country
+couple
+course
+cousin
+cover
+coyote
+crack
+cradle
+craft
+cram
+crane
+crash
+crater
+crawl
+crazy
+cream
+credit
+creek
+crew
+cricket
+crime
+crisp
+critic
+crop
+cross
+crouch
+crowd
+crucial
+cruel
+cruise
+crumble
+crunch
+crush
+cry
+crystal
+cube
+culture
+cup
+cupboard
+curious
+current
+curtain
+curve
+cushion
+custom
+cute
+cycle
+dad
+damage
+damp
+dance
+danger
+daring
+dash
+daughter
+dawn
+day
+deal
+debate
+debris
+decade
+december
+decide
+decline
+decorate
+decrease
+deer
+defense
+define
+defy
+degree
+delay
+deliver
+demand
+demise
+denial
+dentist
+deny
+depart
+depend
+deposit
+depth
+deputy
+derive
+describe
+desert
+design
+desk
+despair
+destroy
+detail
+detect
+develop
+device
+devote
+diagram
+dial
+diamond
+diary
+dice
+diesel
+diet
+differ
+digital
+dignity
+dilemma
+dinner
+dinosaur
+direct
+dirt
+disagree
+discover
+disease
+dish
+dismiss
+disorder
+display
+distance
+divert
+divide
+divorce
+dizzy
+doctor
+document
+dog
+doll
+dolphin
+domain
+donate
+donkey
+donor
+door
+dose
+double
+dove
+draft
+dragon
+drama
+drastic
+draw
+dream
+dress
+drift
+drill
+drink
+drip
+drive
+drop
+drum
+dry
+duck
+dumb
+dune
+during
+dust
+dutch
+duty
+dwarf
+dynamic
+eager
+eagle
+early
+earn
+earth
+easily
+east
+easy
+echo
+ecology
+economy
+edge
+edit
+educate
+effort
+egg
+eight
+either
+elbow
+elder
+electric
+elegant
+element
+elephant
+elevator
+elite
+else
+embark
+embody
+embrace
+emerge
+emotion
+employ
+empower
+empty
+enable
+enact
+end
+endless
+endorse
+enemy
+energy
+enforce
+engage
+engine
+enhance
+enjoy
+enlist
+enough
+enrich
+enroll
+ensure
+enter
+entire
+entry
+envelope
+episode
+equal
+equip
+era
+erase
+erode
+erosion
+error
+erupt
+escape
+essay
+essence
+estate
+eternal
+ethics
+evidence
+evil
+evoke
+evolve
+exact
+example
+excess
+exchange
+excite
+exclude
+excuse
+execute
+exercise
+exhaust
+exhibit
+exile
+exist
+exit
+exotic
+expand
+expect
+expire
+explain
+expose
+express
+extend
+extra
+eye
+eyebrow
+fabric
+face
+faculty
+fade
+faint
+faith
+fall
+false
+fame
+family
+famous
+fan
+fancy
+fantasy
+farm
+fashion
+fat
+fatal
+father
+fatigue
+fault
+favorite
+feature
+february
+federal
+fee
+feed
+feel
+female
+fence
+festival
+fetch
+fever
+few
+fiber
+fiction
+field
+figure
+file
+film
+filter
+final
+find
+fine
+finger
+finish
+fire
+firm
+first
+fiscal
+fish
+fit
+fitness
+fix
+flag
+flame
+flash
+flat
+flavor
+flee
+flight
+flip
+float
+flock
+floor
+flower
+fluid
+flush
+fly
+foam
+focus
+fog
+foil
+fold
+follow
+food
+foot
+force
+forest
+forget
+fork
+fortune
+forum
+forward
+fossil
+foster
+found
+fox
+fragile
+frame
+frequent
+fresh
+friend
+fringe
+frog
+front
+frost
+frown
+frozen
+fruit
+fuel
+fun
+funny
+furnace
+fury
+future
+gadget
+gain
+galaxy
+gallery
+game
+gap
+garage
+garbage
+garden
+garlic
+garment
+gas
+gasp
+gate
+gather
+gauge
+gaze
+general
+genius
+genre
+gentle
+genuine
+gesture
+ghost
+giant
+gift
+giggle
+ginger
+giraffe
+girl
+give
+glad
+glance
+glare
+glass
+glide
+glimpse
+globe
+gloom
+glory
+glove
+glow
+glue
+goat
+goddess
+gold
+good
+goose
+gorilla
+gospel
+gossip
+govern
+gown
+grab
+grace
+grain
+grant
+grape
+grass
+gravity
+great
+green
+grid
+grief
+grit
+grocery
+group
+grow
+grunt
+guard
+guess
+guide
+guilt
+guitar
+gun
+gym
+habit
+hair
+half
+hammer
+hamster
+hand
+happy
+harbor
+hard
+harsh
+harvest
+hat
+have
+hawk
+hazard
+head
+health
+heart
+heavy
+hedgehog
+height
+hello
+helmet
+help
+hen
+hero
+hidden
+high
+hill
+hint
+hip
+hire
+history
+hobby
+hockey
+hold
+hole
+holiday
+hollow
+home
+honey
+hood
+hope
+horn
+horror
+horse
+hospital
+host
+hotel
+hour
+hover
+hub
+huge
+human
+humble
+humor
+hundred
+hungry
+hunt
+hurdle
+hurry
+hurt
+husband
+hybrid
+ice
+icon
+idea
+identify
+idle
+ignore
+ill
+illegal
+illness
+image
+imitate
+immense
+immune
+impact
+impose
+improve
+impulse
+inch
+include
+income
+increase
+index
+indicate
+indoor
+industry
+infant
+inflict
+inform
+inhale
+inherit
+initial
+inject
+injury
+inmate
+inner
+innocent
+input
+inquiry
+insane
+insect
+inside
+inspire
+install
+intact
+interest
+into
+invest
+invite
+involve
+iron
+island
+isolate
+issue
+item
+ivory
+jacket
+jaguar
+jar
+jazz
+jealous
+jeans
+jelly
+jewel
+job
+join
+joke
+journey
+joy
+judge
+juice
+jump
+jungle
+junior
+junk
+just
+kangaroo
+keen
+keep
+ketchup
+key
+kick
+kid
+kidney
+kind
+kingdom
+kiss
+kit
+kitchen
+kite
+kitten
+kiwi
+knee
+knife
+knock
+know
+lab
+label
+labor
+ladder
+lady
+lake
+lamp
+language
+laptop
+large
+later
+latin
+laugh
+laundry
+lava
+law
+lawn
+lawsuit
+layer
+lazy
+leader
+leaf
+learn
+leave
+lecture
+left
+leg
+legal
+legend
+leisure
+lemon
+lend
+length
+lens
+leopard
+lesson
+letter
+level
+liar
+liberty
+library
+license
+life
+lift
+light
+like
+limb
+limit
+link
+lion
+liquid
+list
+little
+live
+lizard
+load
+loan
+lobster
+local
+lock
+logic
+lonely
+long
+loop
+lottery
+loud
+lounge
+love
+loyal
+lucky
+luggage
+lumber
+lunar
+lunch
+luxury
+lyrics
+machine
+mad
+magic
+magnet
+maid
+mail
+main
+major
+make
+mammal
+man
+manage
+mandate
+mango
+mansion
+manual
+maple
+marble
+march
+margin
+marine
+market
+marriage
+mask
+mass
+master
+match
+material
+math
+matrix
+matter
+maximum
+maze
+meadow
+mean
+measure
+meat
+mechanic
+medal
+media
+melody
+melt
+member
+memory
+mention
+menu
+mercy
+merge
+merit
+merry
+mesh
+message
+metal
+method
+middle
+midnight
+milk
+million
+mimic
+mind
+minimum
+minor
+minute
+miracle
+mirror
+misery
+miss
+mistake
+mix
+mixed
+mixture
+mobile
+model
+modify
+mom
+moment
+monitor
+monkey
+monster
+month
+moon
+moral
+more
+morning
+mosquito
+mother
+motion
+motor
+mountain
+mouse
+move
+movie
+much
+muffin
+mule
+multiply
+muscle
+museum
+mushroom
+music
+must
+mutual
+myself
+mystery
+myth
+naive
+name
+napkin
+narrow
+nasty
+nation
+nature
+near
+neck
+need
+negative
+neglect
+neither
+nephew
+nerve
+nest
+net
+network
+neutral
+never
+news
+next
+nice
+night
+noble
+noise
+nominee
+noodle
+normal
+north
+nose
+notable
+note
+nothing
+notice
+novel
+now
+nuclear
+number
+nurse
+nut
+oak
+obey
+object
+oblige
+obscure
+observe
+obtain
+obvious
+occur
+ocean
+october
+odor
+off
+offer
+office
+often
+oil
+okay
+old
+olive
+olympic
+omit
+once
+one
+onion
+online
+only
+open
+opera
+opinion
+oppose
+option
+orange
+orbit
+orchard
+order
+ordinary
+organ
+orient
+original
+orphan
+ostrich
+other
+outdoor
+outer
+output
+outside
+oval
+oven
+over
+own
+owner
+oxygen
+oyster
+ozone
+pact
+paddle
+page
+pair
+palace
+palm
+panda
+panel
+panic
+panther
+paper
+parade
+parent
+park
+parrot
+party
+pass
+patch
+path
+patient
+patrol
+pattern
+pause
+pave
+payment
+peace
+peanut
+pear
+peasant
+pelican
+pen
+penalty
+pencil
+people
+pepper
+perfect
+permit
+person
+pet
+phone
+photo
+phrase
+physical
+piano
+picnic
+picture
+piece
+pig
+pigeon
+pill
+pilot
+pink
+pioneer
+pipe
+pistol
+pitch
+pizza
+place
+planet
+plastic
+plate
+play
+please
+pledge
+pluck
+plug
+plunge
+poem
+poet
+point
+polar
+pole
+police
+pond
+pony
+pool
+popular
+portion
+position
+possible
+post
+potato
+pottery
+poverty
+powder
+power
+practice
+praise
+predict
+prefer
+prepare
+present
+pretty
+prevent
+price
+pride
+primary
+print
+priority
+prison
+private
+prize
+problem
+process
+produce
+profit
+program
+project
+promote
+proof
+property
+prosper
+protect
+proud
+provide
+public
+pudding
+pull
+pulp
+pulse
+pumpkin
+punch
+pupil
+puppy
+purchase
+purity
+purpose
+purse
+push
+put
+puzzle
+pyramid
+quality
+quantum
+quarter
+question
+quick
+quit
+quiz
+quote
+rabbit
+raccoon
+race
+rack
+radar
+radio
+rail
+rain
+raise
+rally
+ramp
+ranch
+random
+range
+rapid
+rare
+rate
+rather
+raven
+raw
+razor
+ready
+real
+reason
+rebel
+rebuild
+recall
+receive
+recipe
+record
+recycle
+reduce
+reflect
+reform
+refuse
+region
+regret
+regular
+reject
+relax
+release
+relief
+rely
+remain
+remember
+remind
+remove
+render
+renew
+rent
+reopen
+repair
+repeat
+replace
+report
+require
+rescue
+resemble
+resist
+resource
+response
+result
+retire
+retreat
+return
+reunion
+reveal
+review
+reward
+rhythm
+rib
+ribbon
+rice
+rich
+ride
+ridge
+rifle
+right
+rigid
+ring
+riot
+ripple
+risk
+ritual
+rival
+river
+road
+roast
+robot
+robust
+rocket
+romance
+roof
+rookie
+room
+rose
+rotate
+rough
+round
+route
+royal
+rubber
+rude
+rug
+rule
+run
+runway
+rural
+sad
+saddle
+sadness
+safe
+sail
+salad
+salmon
+salon
+salt
+salute
+same
+sample
+sand
+satisfy
+satoshi
+sauce
+sausage
+save
+say
+scale
+scan
+scare
+scatter
+scene
+scheme
+school
+science
+scissors
+scorpion
+scout
+scrap
+screen
+script
+scrub
+sea
+search
+season
+seat
+second
+secret
+section
+security
+seed
+seek
+segment
+select
+sell
+seminar
+senior
+sense
+sentence
+series
+service
+session
+settle
+setup
+seven
+shadow
+shaft
+shallow
+share
+shed
+shell
+sheriff
+shield
+shift
+shine
+ship
+shiver
+shock
+shoe
+shoot
+shop
+short
+shoulder
+shove
+shrimp
+shrug
+shuffle
+shy
+sibling
+sick
+side
+siege
+sight
+sign
+silent
+silk
+silly
+silver
+similar
+simple
+since
+sing
+siren
+sister
+situate
+six
+size
+skate
+sketch
+ski
+skill
+skin
+skirt
+skull
+slab
+slam
+sleep
+slender
+slice
+slide
+slight
+slim
+slogan
+slot
+slow
+slush
+small
+smart
+smile
+smoke
+smooth
+snack
+snake
+snap
+sniff
+snow
+soap
+soccer
+social
+sock
+soda
+soft
+solar
+soldier
+solid
+solution
+solve
+someone
+song
+soon
+sorry
+sort
+soul
+sound
+soup
+source
+south
+space
+spare
+spatial
+spawn
+speak
+special
+speed
+spell
+spend
+sphere
+spice
+spider
+spike
+spin
+spirit
+split
+spoil
+sponsor
+spoon
+sport
+spot
+spray
+spread
+spring
+spy
+square
+squeeze
+squirrel
+stable
+stadium
+staff
+stage
+stairs
+stamp
+stand
+start
+state
+stay
+steak
+steel
+stem
+step
+stereo
+stick
+still
+sting
+stock
+stomach
+stone
+stool
+story
+stove
+strategy
+street
+strike
+strong
+struggle
+student
+stuff
+stumble
+style
+subject
+submit
+subway
+success
+such
+sudden
+suffer
+sugar
+suggest
+suit
+summer
+sun
+sunny
+sunset
+super
+supply
+supreme
+sure
+surface
+surge
+surprise
+surround
+survey
+suspect
+sustain
+swallow
+swamp
+swap
+swarm
+swear
+sweet
+swift
+swim
+swing
+switch
+sword
+symbol
+symptom
+syrup
+system
+table
+tackle
+tag
+tail
+talent
+talk
+tank
+tape
+target
+task
+taste
+tattoo
+taxi
+teach
+team
+tell
+ten
+tenant
+tennis
+tent
+term
+test
+text
+thank
+that
+theme
+then
+theory
+there
+they
+thing
+this
+thought
+three
+thrive
+throw
+thumb
+thunder
+ticket
+tide
+tiger
+tilt
+timber
+time
+tiny
+tip
+tired
+tissue
+title
+toast
+tobacco
+today
+toddler
+toe
+together
+toilet
+token
+tomato
+tomorrow
+tone
+tongue
+tonight
+tool
+tooth
+top
+topic
+topple
+torch
+tornado
+tortoise
+toss
+total
+tourist
+toward
+tower
+town
+toy
+track
+trade
+traffic
+tragic
+train
+transfer
+trap
+trash
+travel
+tray
+treat
+tree
+trend
+trial
+tribe
+trick
+trigger
+trim
+trip
+trophy
+trouble
+truck
+true
+truly
+trumpet
+trust
+truth
+try
+tube
+tuition
+tumble
+tuna
+tunnel
+turkey
+turn
+turtle
+twelve
+twenty
+twice
+twin
+twist
+two
+type
+typical
+ugly
+umbrella
+unable
+unaware
+uncle
+uncover
+under
+undo
+unfair
+unfold
+unhappy
+uniform
+unique
+unit
+universe
+unknown
+unlock
+until
+unusual
+unveil
+update
+upgrade
+uphold
+upon
+upper
+upset
+urban
+urge
+usage
+use
+used
+useful
+useless
+usual
+utility
+vacant
+vacuum
+vague
+valid
+valley
+valve
+van
+vanish
+vapor
+various
+vast
+vault
+vehicle
+velvet
+vendor
+venture
+venue
+verb
+verify
+version
+very
+vessel
+veteran
+viable
+vibrant
+vicious
+victory
+video
+view
+village
+vintage
+violin
+virtual
+virus
+visa
+visit
+visual
+vital
+vivid
+vocal
+voice
+void
+volcano
+volume
+vote
+voyage
+wage
+wagon
+wait
+walk
+wall
+walnut
+want
+warfare
+warm
+warrior
+wash
+wasp
+waste
+water
+wave
+way
+wealth
+weapon
+wear
+weasel
+weather
+web
+wedding
+weekend
+weird
+welcome
+west
+wet
+whale
+what
+wheat
+wheel
+when
+where
+whip
+whisper
+wide
+width
+wife
+wild
+will
+win
+window
+wine
+wing
+wink
+winner
+winter
+wire
+wisdom
+wise
+wish
+witness
+wolf
+woman
+wonder
+wood
+wool
+word
+work
+world
+worry
+worth
+wrap
+wreck
+wrestle
+wrist
+write
+wrong
+yard
+year
+yellow
+you
+young
+youth
+zebra
+zero
+zone
+zoo`.split(`
+`);function $n(e){if(e.length>=255)throw new TypeError("Alphabet too long");const t=new Uint8Array(256);for(let u=0;u<t.length;u++)t[u]=255;for(let u=0;u<e.length;u++){const c=e.charAt(u),f=c.charCodeAt(0);if(t[f]!==255)throw new TypeError(c+" is ambiguous");t[f]=u}const n=e.length,r=e.charAt(0),s=Math.log(n)/Math.log(256),o=Math.log(256)/Math.log(n);function a(u){if(u instanceof Uint8Array||(ArrayBuffer.isView(u)?u=new Uint8Array(u.buffer,u.byteOffset,u.byteLength):Array.isArray(u)&&(u=Uint8Array.from(u))),!(u instanceof Uint8Array))throw new TypeError("Expected Uint8Array");if(u.length===0)return"";let c=0,f=0,g=0;const v=u.length;for(;g!==v&&u[g]===0;)g++,c++;const w=(v-g)*o+1>>>0,p=new Uint8Array(w);for(;g!==v;){let L=u[g],U=0;for(let E=w-1;(L!==0||U<f)&&E!==-1;E--,U++)L+=256*p[E]>>>0,p[E]=L%n>>>0,L=L/n>>>0;if(L!==0)throw new Error("Non-zero carry");f=U,g++}let k=w-f;for(;k!==w&&p[k]===0;)k++;let N=r.repeat(c);for(;k<w;++k)N+=e.charAt(p[k]);return N}function l(u){if(typeof u!="string")throw new TypeError("Expected String");if(u.length===0)return new Uint8Array;let c=0,f=0,g=0;for(;u[c]===r;)f++,c++;const v=(u.length-c)*s+1>>>0,w=new Uint8Array(v);for(;c<u.length;){const L=u.charCodeAt(c);if(L>255)return;let U=t[L];if(U===255)return;let E=0;for(let O=v-1;(U!==0||E<g)&&O!==-1;O--,E++)U+=n*w[O]>>>0,w[O]=U%256>>>0,U=U/256>>>0;if(U!==0)throw new Error("Non-zero carry");g=E,c++}let p=v-g;for(;p!==v&&w[p]===0;)p++;const k=new Uint8Array(f+(v-p));let N=f;for(;p!==v;)k[N++]=w[p++];return k}function i(u){const c=l(u);if(c)return c;throw new Error("Non-base"+n+" character")}return{encode:a,decodeUnsafe:l,decode:i}}var Yn="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";const Xn=$n(Yn);/*! noble-ciphers - MIT License (c) 2023 Paul Miller (paulmillr.com) */function Kn(e){return e instanceof Uint8Array||ArrayBuffer.isView(e)&&e.constructor.name==="Uint8Array"}function Ct(e){if(typeof e!="boolean")throw new Error(`boolean expected, not ${e}`)}function tt(e){if(!Number.isSafeInteger(e)||e<0)throw new Error("positive integer expected, got "+e)}function qe(e,...t){if(!Kn(e))throw new Error("Uint8Array expected");if(t.length>0&&!t.includes(e.length))throw new Error("Uint8Array expected of length "+t+", got length="+e.length)}function pe(e){return new Uint32Array(e.buffer,e.byteOffset,Math.floor(e.byteLength/4))}function Wn(...e){for(let t=0;t<e.length;t++)e[t].fill(0)}function Pn(e,t){if(t==null||typeof t!="object")throw new Error("options must be defined");return Object.assign(e,t)}function Mt(e){return Uint8Array.from(e)}const Ht=e=>Uint8Array.from(e.split("").map(t=>t.charCodeAt(0))),Qn=Ht("expand 16-byte k"),Jn=Ht("expand 32-byte k"),er=pe(Qn),tr=pe(Jn);function T(e,t){return e<<t|e>>>32-t}function nt(e){return e.byteOffset%4===0}const Te=64,nr=16,Rt=2**32-1,Zt=new Uint32Array;function rr(e,t,n,r,s,o,a,l){const i=s.length,u=new Uint8Array(Te),c=pe(u),f=nt(s)&&nt(o),g=f?pe(s):Zt,v=f?pe(o):Zt;for(let w=0;w<i;a++){if(e(t,n,r,c,a,l),a>=Rt)throw new Error("arx: counter overflow");const p=Math.min(Te,i-w);if(f&&p===Te){const k=w/4;if(w%4!==0)throw new Error("arx: invalid block position");for(let N=0,L;N<nr;N++)L=k+N,v[L]=g[L]^c[N];w+=Te;continue}for(let k=0,N;k<p;k++)N=w+k,o[N]=s[N]^u[k];w+=p}}function or(e,t){const{allowShortKeys:n,extendNonceFn:r,counterLength:s,counterRight:o,rounds:a}=Pn({allowShortKeys:!1,counterLength:8,counterRight:!1,rounds:20},t);if(typeof e!="function")throw new Error("core must be a function");return tt(s),tt(a),Ct(o),Ct(n),(l,i,u,c,f=0)=>{qe(l),qe(i),qe(u);const g=u.length;if(c===void 0&&(c=new Uint8Array(g)),qe(c),tt(f),f<0||f>=Rt)throw new Error("arx: counter overflow");if(c.length<g)throw new Error(`arx: output (${c.length}) is shorter than data (${g})`);const v=[];let w=l.length,p,k;if(w===32)v.push(p=Mt(l)),k=tr;else if(w===16&&n)p=new Uint8Array(32),p.set(l),p.set(l,16),k=er,v.push(p);else throw new Error(`arx: invalid 32-byte key, got length=${w}`);nt(i)||v.push(i=Mt(i));const N=pe(p);if(r){if(i.length!==24)throw new Error("arx: extended nonce must be 24 bytes");r(k,N,pe(i.subarray(0,16)),N),i=i.subarray(16)}const L=16-s;if(L!==i.length)throw new Error(`arx: nonce must be ${L} or 16 bytes`);if(L!==12){const E=new Uint8Array(12);E.set(i,o?0:12-i.length),i=E,v.push(i)}const U=pe(i);return rr(e,k,N,U,u,c,f,a),Wn(...v),c}}function ir(e,t,n,r,s,o=20){let a=e[0],l=e[1],i=e[2],u=e[3],c=t[0],f=t[1],g=t[2],v=t[3],w=t[4],p=t[5],k=t[6],N=t[7],L=s,U=n[0],E=n[1],O=n[2],H=a,j=l,d=i,_=u,b=c,I=f,S=g,z=v,R=w,G=p,W=k,Q=N,A=L,h=U,m=E,x=O;for(let q=0;q<o;q+=2)H=H+b|0,A=T(A^H,16),R=R+A|0,b=T(b^R,12),H=H+b|0,A=T(A^H,8),R=R+A|0,b=T(b^R,7),j=j+I|0,h=T(h^j,16),G=G+h|0,I=T(I^G,12),j=j+I|0,h=T(h^j,8),G=G+h|0,I=T(I^G,7),d=d+S|0,m=T(m^d,16),W=W+m|0,S=T(S^W,12),d=d+S|0,m=T(m^d,8),W=W+m|0,S=T(S^W,7),_=_+z|0,x=T(x^_,16),Q=Q+x|0,z=T(z^Q,12),_=_+z|0,x=T(x^_,8),Q=Q+x|0,z=T(z^Q,7),H=H+I|0,x=T(x^H,16),W=W+x|0,I=T(I^W,12),H=H+I|0,x=T(x^H,8),W=W+x|0,I=T(I^W,7),j=j+S|0,A=T(A^j,16),Q=Q+A|0,S=T(S^Q,12),j=j+S|0,A=T(A^j,8),Q=Q+A|0,S=T(S^Q,7),d=d+z|0,h=T(h^d,16),R=R+h|0,z=T(z^R,12),d=d+z|0,h=T(h^d,8),R=R+h|0,z=T(z^R,7),_=_+b|0,m=T(m^_,16),G=G+m|0,b=T(b^G,12),_=_+b|0,m=T(m^_,8),G=G+m|0,b=T(b^G,7);let B=0;r[B++]=a+H|0,r[B++]=l+j|0,r[B++]=i+d|0,r[B++]=u+_|0,r[B++]=c+b|0,r[B++]=f+I|0,r[B++]=g+S|0,r[B++]=v+z|0,r[B++]=w+R|0,r[B++]=p+G|0,r[B++]=k+W|0,r[B++]=N+Q|0,r[B++]=L+A|0,r[B++]=U+h|0,r[B++]=E+m|0,r[B++]=O+x|0}const sr=or(ir,{counterRight:!1,counterLength:4,allowShortKeys:!1});function ar(e){return e&&e.__esModule&&Object.prototype.hasOwnProperty.call(e,"default")?e.default:e}var rt={};/*! crc32.js (C) 2014-present SheetJS -- http://sheetjs.com */var Ft;function cr(){return Ft||(Ft=1,function(e){(function(t){t(typeof DO_NOT_EXPORT_CRC>"u"?e:{})})(function(t){t.version="1.2.2";function n(){for(var d=0,_=new Array(256),b=0;b!=256;++b)d=b,d=d&1?-306674912^d>>>1:d>>>1,d=d&1?-306674912^d>>>1:d>>>1,d=d&1?-306674912^d>>>1:d>>>1,d=d&1?-306674912^d>>>1:d>>>1,d=d&1?-306674912^d>>>1:d>>>1,d=d&1?-306674912^d>>>1:d>>>1,d=d&1?-306674912^d>>>1:d>>>1,d=d&1?-306674912^d>>>1:d>>>1,_[b]=d;return typeof Int32Array<"u"?new Int32Array(_):_}var r=n();function s(d){var _=0,b=0,I=0,S=typeof Int32Array<"u"?new Int32Array(4096):new Array(4096);for(I=0;I!=256;++I)S[I]=d[I];for(I=0;I!=256;++I)for(b=d[I],_=256+I;_<4096;_+=256)b=S[_]=b>>>8^d[b&255];var z=[];for(I=1;I!=16;++I)z[I-1]=typeof Int32Array<"u"?S.subarray(I*256,I*256+256):S.slice(I*256,I*256+256);return z}var o=s(r),a=o[0],l=o[1],i=o[2],u=o[3],c=o[4],f=o[5],g=o[6],v=o[7],w=o[8],p=o[9],k=o[10],N=o[11],L=o[12],U=o[13],E=o[14];function O(d,_){for(var b=_^-1,I=0,S=d.length;I<S;)b=b>>>8^r[(b^d.charCodeAt(I++))&255];return~b}function H(d,_){for(var b=_^-1,I=d.length-15,S=0;S<I;)b=E[d[S++]^b&255]^U[d[S++]^b>>8&255]^L[d[S++]^b>>16&255]^N[d[S++]^b>>>24]^k[d[S++]]^p[d[S++]]^w[d[S++]]^v[d[S++]]^g[d[S++]]^f[d[S++]]^c[d[S++]]^u[d[S++]]^i[d[S++]]^l[d[S++]]^a[d[S++]]^r[d[S++]];for(I+=15;S<I;)b=b>>>8^r[(b^d[S++])&255];return~b}function j(d,_){for(var b=_^-1,I=0,S=d.length,z=0,R=0;I<S;)z=d.charCodeAt(I++),z<128?b=b>>>8^r[(b^z)&255]:z<2048?(b=b>>>8^r[(b^(192|z>>6&31))&255],b=b>>>8^r[(b^(128|z&63))&255]):z>=55296&&z<57344?(z=(z&1023)+64,R=d.charCodeAt(I++)&1023,b=b>>>8^r[(b^(240|z>>8&7))&255],b=b>>>8^r[(b^(128|z>>2&63))&255],b=b>>>8^r[(b^(128|R>>6&15|(z&3)<<4))&255],b=b>>>8^r[(b^(128|R&63))&255]):(b=b>>>8^r[(b^(224|z>>12&15))&255],b=b>>>8^r[(b^(128|z>>6&63))&255],b=b>>>8^r[(b^(128|z&63))&255]);return~b}t.table=r,t.bstr=O,t.buf=H,t.str=j})}(rt)),rt}var lr=cr();const ur=ar(lr),fr=jt.ExtendedPoint;window.ed25519Module={ed25519:jt,RistrettoPoint:fr},window.blake2bModule={blake2b:Vn},window.wordlistModule={wordlist:Gn},window.bs58Module={default:Xn},window.chachaModule={chacha20:sr},window.crc32Module={default:ur},console.log("External dependencies loaded")})();
+    </script>
+
+    <script>
+      window.initTariGenerator = async function() {
+        try {        
+          const ed25519Module = window.ed25519Module;
+          const { blake2b } = window.blake2bModule;
+          const { wordlist } = window.wordlistModule;
+          const bs58 = window.bs58Module;
+          const { chacha20 } = window.chachaModule;
+          const CRC32 = window.crc32Module;
+    
+          const { RistrettoPoint } = ed25519Module;
+          const curveOrder = ed25519Module.ed25519.CURVE.n;
+          const wordlistEnglish = wordlist;
+
+          const { hash, ArgonType } = window.argon2;
+          const bs58encode = input =>
+            bs58.default.encode(
+              input instanceof Uint8Array ? input : new TextEncoder().encode(input)
+            );
+
+          // Constants
+          const CIPHER_SEED_VERSION = 0x02;
+          const BIRTHDAY_GENESIS_FROM_UNIX_EPOCH = 1640995200;
+          const SECONDS_PER_DAY = 86400;
+          const DEFAULT_CIPHER_SEED_PASSPHRASE = 'TARI_CIPHER_SEED';
+          const TARI_ADDRESS_FEATURES_ONE_SIDED = 0x01;
+          const TARI_ADDRESS_FEATURES_PAYMENT_ID = 0x04;
+
+          // Emoji mapping from emoji.rs
+          const EMOJI_MAP = [
+            '🐢', '📟', '🌈', '🌊', '🎯', '🐋', '🌙', '🤔', '🌕', '⭐', '🎋', '🌰', '🌴', '🌵', '🌲', '🌸', '🌹', '🌻', '🌽',
+            '🍀', '🍁', '🍄', '🥑', '🍆', '🍇', '🍈', '🍉', '🍊', '🍋', '🍌', '🍍', '🍎', '🍐', '🍑', '🍒', '🍓', '🍔', '🍕',
+            '🍗', '🍚', '🍞', '🍟', '🥝', '🍣', '🍦', '🍩', '🍪', '🍫', '🍬', '🍭', '🍯', '🥐', '🍳', '🥄', '🍵', '🍶', '🍷',
+            '🍸', '🍾', '🍺', '🍼', '🎀', '🎁', '🎂', '🎃', '🤖', '🎈', '🎉', '🎒', '🎓', '🎠', '🎡', '🎢', '🎣', '🎤', '🎥',
+            '🎧', '🎨', '🎩', '🎪', '🎬', '🎭', '🎮', '🎰', '🎱', '🎲', '🎳', '🎵', '🎷', '🎸', '🎹', '🎺', '🎻', '🎼', '🎽',
+            '🎾', '🎿', '🏀', '🏁', '🏆', '🏈', '⚽', '🏠', '🏥', '🏦', '🏭', '🏰', '🐀', '🐉', '🐊', '🐌', '🐍', '🦁', '🐐',
+            '🐑', '🐔', '🙈', '🐗', '🐘', '🐙', '🐚', '🐛', '🐜', '🐝', '🐞', '🦋', '🐣', '🐨', '🦀', '🐪', '🐬', '🐭', '🐮',
+            '🐯', '🐰', '🦆', '🦂', '🐴', '🐵', '🐶', '🐷', '🐸', '🐺', '🐻', '🐼', '🐽', '🐾', '👀', '👅', '👑', '👒', '🧢',
+            '💅', '👕', '👖', '👗', '👘', '👙', '💃', '👛', '👞', '👟', '👠', '🥊', '👢', '👣', '🤡', '👻', '👽', '👾', '🤠',
+            '👃', '💄', '💈', '💉', '💊', '💋', '👂', '💍', '💎', '💐', '💔', '🔒', '🧩', '💡', '💣', '💤', '💦', '💨', '💩',
+            '➕', '💯', '💰', '💳', '💵', '💺', '💻', '💼', '📈', '📜', '📌', '📎', '📖', '📿', '📡', '⏰', '📱', '📷', '🔋',
+            '🔌', '🚰', '🔑', '🔔', '🔥', '🔦', '🔧', '🔨', '🔩', '🔪', '🔫', '🔬', '🔭', '🔮', '🔱', '🗽', '😂', '😇', '😈',
+            '🤑', '😍', '😎', '😱', '😷', '🤢', '👍', '👶', '🚀', '🚁', '🚂', '🚚', '🚑', '🚒', '🚓', '🛵', '🚗', '🚜', '🚢',
+            '🚦', '🚧', '🚨', '🚪', '🚫', '🚲', '🚽', '🚿', '🧲'
+          ];
+        
+          // Global state for current address
+          let currentAddressData = null;
+
+          // Utility functions
+          function timingSafeEqual(a, b) {
+            if (a.length !== b.length) return false;
+            let diff = 0;
+            for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+            return diff === 0;
+          }
+          
+          function bytesToHex(b) { return Array.from(b).map(x=>x.toString(16).padStart(2,'0')).join(''); }
+          function hexToBytes(hex) {
+            if (hex.startsWith('0x')) hex = hex.slice(2);
+            if (hex.length % 2) hex = '0' + hex;
+            const bytes = new Uint8Array(hex.length / 2);
+            for (let i = 0; i < bytes.length; i++) {
+              bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+            }
+            return bytes;
+          }
+          function u64ToLeBytes(v,len=8) { const b=new Uint8Array(len); let val=BigInt(v); for(let i=0;i<len;i++){b[i]=Number((val>>(BigInt(i)*8n))&0xFFn);} return b; }
+          function leBytesToU64(b){let v=0n;for(let i=b.length-1;i>=0;i--)v=(v<<8n)|BigInt(b[i]);return v;}
+          function concatBytes(...arrs){const o=new Uint8Array(arrs.reduce((s,a)=>s+a.length,0));let off=0;for(const a of arrs){o.set(a,off);off+=a.length;}return o;}
+          function textToBytes(t){return new TextEncoder().encode(t);}
+          async function generateRandomBytes(n){return crypto.getRandomValues(new Uint8Array(n));}
+
+          // Scalar operations
+          function bytesToScalar(bytes) {
+            let scalar = 0n;
+            for (let i = bytes.length - 1; i >= 0; i--) {
+              scalar = (scalar << 8n) | BigInt(bytes[i]);
+            }
+            return scalar % curveOrder;
+          }
+          
+          function scalarToBytes(scalar) {
+            const bytes = new Uint8Array(32);
+            let s = BigInt(scalar);
+            for (let i = 0; i < 32; i++) {
+              bytes[i] = Number(s & 0xFFn);
+              s >>= 8n;
+            }
+            return bytes;
+          }
+
+          // Domain separated hasher for CipherSeed operations
+          function domainSeparatedHash(hashSize, label, ...data) {
+            const domain = "com.tari.base_layer.key_manager";
+            const version = 1;
+            const domainSeparationTag = `${domain}.v${version}.${label}`;
+            
+            let input = new Uint8Array(0);
+            const tagBytes = textToBytes(domainSeparationTag);
+            const tagLengthBytes = u64ToLeBytes(tagBytes.length);
+            input = concatBytes(input, tagLengthBytes, tagBytes);
+            
+            for (let i = 0; i < data.length; i++) {
+              const dataLengthBytes = u64ToLeBytes(data[i].length);
+              input = concatBytes(input, dataLengthBytes, data[i]);
+            }
+            
+            return blake2b(input, { dkLen: hashSize });
+          }
+
+          // KeyManager domain separated hasher for key derivation
+          function keyManagerDomainSeparatedHash(label, masterKey, branchSeed, keyIndex) {
+            const domain = "com.tari.base_layer.key_manager";
+            const version = 1;
+            const domainSeparationTag = `${domain}.v${version}.${label}`;
+            
+            const tagBytes = textToBytes(domainSeparationTag);
+            const tagLengthBytes = u64ToLeBytes(tagBytes.length);
+            const masterKeyLengthBytes = u64ToLeBytes(masterKey.length);
+            const branchSeedBytes = textToBytes(branchSeed);
+            const branchSeedLengthBytes = u64ToLeBytes(branchSeedBytes.length);
+            const keyIndexBytes = u64ToLeBytes(keyIndex);
+            const keyIndexLengthBytes = u64ToLeBytes(keyIndexBytes.length);
+            
+            const input = concatBytes(
+              tagLengthBytes,
+              tagBytes,
+              masterKeyLengthBytes,
+              masterKey,
+              branchSeedLengthBytes,
+              branchSeedBytes,
+              keyIndexLengthBytes,
+              keyIndexBytes
+            );
+            
+            const result = blake2b(input, { dkLen: 64 });
+            return bytesToScalar(result);
+          }
+
+          // CipherSeed functions
+          async function deriveCipherSeedKeys(pass, salt) {
+            const argonSalt = domainSeparatedHash(32, 'cipher_seed_pbkdf_salt', salt).slice(0, 16);
+            const passBytes = textToBytes(pass);
+            
+            const res = await hash({
+              pass: passBytes,
+              salt: argonSalt,
+              time: 1,
+              mem: 46 * 1024,
+              parallelism: 1,
+              type: ArgonType.Argon2d,
+              hashLen: 64
+            });
+            
+            const hashBytes = res.hash;
+            const encryptionKey = hashBytes.slice(0, 32);
+            const macKey = hashBytes.slice(32);
+            
+            return { encryptionKey, macKey };
+          }
+          
+          function generateCipherSeedMac(version, birthday, entropy, salt, macKey){
+            const result = domainSeparatedHash(
+              32, 
+              'cipher_seed_mac',
+              new Uint8Array([version]),
+              birthday,
+              entropy,
+              salt,
+              macKey
+            );
+            return result.slice(0, 5);
+          }
+          
+          function applyCipherSeedStreamCipher(data, key, salt){
+            const nonceFull = domainSeparatedHash(32, 'cipher_seed_encryption_nonce', salt);
+            const nonce = nonceFull.slice(0, 12);
+            
+            const keyBytes = new Uint8Array(32);
+            const nonceBytes = new Uint8Array(12);
+            keyBytes.set(key.slice(0, 32));
+            nonceBytes.set(nonce.slice(0, 12));
+            
+            const result = chacha20(keyBytes, nonceBytes, data);
+            data.set(result);
+            return data;
+          }
+        
+          async function encipherCipherSeed(seed, pass) {
+            const { encryptionKey, macKey } = await deriveCipherSeedKeys(pass, seed.salt);
+            const bBytes = u64ToLeBytes(seed.birthday, 2);
+            const mac = generateCipherSeedMac(seed.version, bBytes, seed.entropy, seed.salt, macKey);
+            const secret = concatBytes(bBytes, seed.entropy, mac);
+            
+            applyCipherSeedStreamCipher(secret, encryptionKey, seed.salt);
+            
+            const payload = concatBytes(Uint8Array.of(seed.version), secret, seed.salt);
+            const crc = CRC32.default.buf(payload);
+            const cs = new Uint8Array(4); 
+            new DataView(cs.buffer).setUint32(0, crc>>>0, true);
+            
+            return concatBytes(payload, cs);
+          }
+
+          async function decipherCipherSeed(data, pass) {
+            const encLen = 1+23+5+4;
+            if(data.length!==encLen) throw new Error('Invalid seed length');
+            const body = data.slice(0,1+23+5);
+            const chk = data.slice(-4);
+            const expectedCrc = new Uint8Array(4);
+            new DataView(expectedCrc.buffer).setUint32(0, CRC32.default.buf(body)>>>0, true);
+            if(!timingSafeEqual(chk, expectedCrc)) throw new Error('CRC failed');
+            const version=data[0]; if(version!==CIPHER_SEED_VERSION) throw new Error('Version mismatch');
+            const encSec=data.slice(1,24);
+            const salt=data.slice(24,29);
+            const { encryptionKey, macKey } = await deriveCipherSeedKeys(pass, salt);
+            const secret=applyCipherSeedStreamCipher(new Uint8Array(encSec), encryptionKey, salt);
+            const bBytes=secret.slice(0,2);
+            const entropy=secret.slice(2,18);
+            const recvMac=secret.slice(18);
+            if(!timingSafeEqual(recvMac, generateCipherSeedMac(version,bBytes,entropy,salt,macKey))) throw new Error('MAC failed');
+            return { version, birthday: Number(leBytesToU64(bBytes)), entropy, salt };
+          }
+          
+          // Mnemonic functions
+          function bytesToMnemonic(b) {
+            if (!(b instanceof Uint8Array)) b = new Uint8Array(b);
+            
+            const bits = [];
+            b.forEach((byte) => {
+              for(let j = 0; j < 8; j++) {
+                bits.push((byte >> j) & 1);
+              }
+            });
+            
+            const group_bit_count = 11;
+            let padded_size = Math.floor(bits.length / group_bit_count);
+            if (bits.length % group_bit_count > 0) padded_size += 1;
+            padded_size *= group_bit_count;
+            
+            while (bits.length < padded_size) bits.push(false);
+            
+            const words = [];
+            for (let i = 0; i < Math.floor(bits.length / group_bit_count); i++) {
+              const start_index = i * group_bit_count;
+              const stop_index = start_index + group_bit_count;
+              const slice = bits.slice(start_index, stop_index);
+              
+              let wordIndex = 0;
+              for (let j = 0; j < slice.length; j++) {
+                if (slice[j]) wordIndex |= (1 << j);
+              }
+              
+              words.push(wordlistEnglish[wordIndex]);
+            }
+            
+            return words.join(' ');
+          }
+
+          function mnemonicToBytes(mnemonic) {
+            const words = mnemonic.split(' ');
+            if (words.length !== 24) throw new Error('24 words required');
+            
+            const bits = [];
+            words.forEach((word) => {
+              const wordIndex = wordlistEnglish.indexOf(word);
+              if (wordIndex < 0) throw new Error(`Invalid word: ${word}`);
+              
+              for (let j = 0; j < 11; j++) {
+                bits.push((wordIndex >> j) & 1);
+              }
+            });
+            
+            const bytes = [];
+            for (let i = 0; i < bits.length; i += 8) {
+              let byte = 0;
+              for (let j = 0; j < 8 && i + j < bits.length; j++) {
+                if (bits[i + j]) byte |= (1 << j);
+              }
+              bytes.push(byte);
+            }
+            
+            return new Uint8Array(bytes.slice(0, 33));
+          }
+
+          // Address functions
+          function computeDammChecksum(data) {
+            const MASK = 27; // 0x1B
+            let result = 0;
+            
+            for (let digit of data) {
+              result ^= digit;
+              let overflow = (result & 0x80) !== 0;
+              result = (result << 1) & 0xFF;
+              if (overflow) result ^= MASK;
+            }
+            
+            return result;
+          }
+
+          function createDualAddress(net, features, pubViewKey, pubSpendKey, paymentIdData = null) {
+            // Build address: network + features + view_key + spend_key + payment_id_data
+            let addressBytesForChecksum = concatBytes(
+              new Uint8Array([net, features]),
+              pubViewKey,
+              pubSpendKey
+            );
+            
+            // If payment ID data is provided, append it directly
+            if (paymentIdData && paymentIdData.length > 0) {
+              addressBytesForChecksum = concatBytes(addressBytesForChecksum, paymentIdData);
+            }
+            
+            // Calculate checksum over everything except the checksum itself
+            const checksum = computeDammChecksum(addressBytesForChecksum);
+            
+            // Final address = address_data + checksum
+            return concatBytes(addressBytesForChecksum, new Uint8Array([checksum]));
+          }
+
+          function tariAddressToBase58(finalAddressBytes) {
+            const byte0B58 = bs58encode(new Uint8Array([finalAddressBytes[0]]));
+            const byte1B58 = bs58encode(new Uint8Array([finalAddressBytes[1]]));
+            const restB58 = bs58encode(finalAddressBytes.slice(2));
+            return byte0B58 + byte1B58 + restB58;
+          }
+
+          function tariAddressToEmoji(finalAddressBytes) {
+            const emojiChars = [];
+            for (let i = 0; i < finalAddressBytes.length; i++) {
+              const byteVal = finalAddressBytes[i];
+              emojiChars.push(EMOJI_MAP[byteVal]);
+            }
+            return emojiChars.join('');
+          }
+          
+          async function generateNewCipherSeed() {
+            const entropy = await generateRandomBytes(16);
+            const salt = await generateRandomBytes(5);
+            const birthday = Math.floor((Date.now()/1000-BIRTHDAY_GENESIS_FROM_UNIX_EPOCH)/SECONDS_PER_DAY)&0xFFFF;
+            
+            return { 
+              version: CIPHER_SEED_VERSION, 
+              birthday, 
+              entropy, 
+              salt 
+            };
+          }
+
+          function clearOutputs() {
+            document.getElementById('privateViewKeyOutput').value = '';
+            document.getElementById('publicViewKeyOutput').value = '';
+            document.getElementById('publicSpendKeyOutput').value = '';
+            document.getElementById('tariAddressOutput').value = '';
+            document.getElementById('emojiAddressOutput').value = '';
+          }
+
+          function updateAddress() {
+            if (!currentAddressData) return;
+            
+            const paymentId = document.getElementById('paymentId').value.trim();
+            let paymentIdData = null;
+            let features = TARI_ADDRESS_FEATURES_ONE_SIDED;
+            
+            if (paymentId) {
+              // Check if it looks like a hex string (even length, only hex chars)
+              if (/^[0-9a-fA-F]+$/.test(paymentId) && paymentId.length % 2 === 0) {
+                try {
+                  paymentIdData = hexToBytes(paymentId);
+                } catch (e) {
+                  // If hex parsing fails, treat as UTF-8
+                  paymentIdData = textToBytes(paymentId);
+                }
+              } else {
+                // Treat as UTF-8 string
+                paymentIdData = textToBytes(paymentId);
+              }
+              features |= TARI_ADDRESS_FEATURES_PAYMENT_ID;
+            }
+            
+            const finalAddressBytes = createDualAddress(
+              currentAddressData.net, 
+              features, 
+              currentAddressData.pubViewKey, 
+              currentAddressData.pubSpendKey, 
+              paymentIdData
+            );
+            
+            const base58Address = tariAddressToBase58(finalAddressBytes);
+            const emojiAddress = tariAddressToEmoji(finalAddressBytes);
+            
+            document.getElementById('tariAddressOutput').value = base58Address;
+            document.getElementById('emojiAddressOutput').value = emojiAddress;
+          }
+
+          function setOutputs(kViewBytes, pubViewKey, pubSpendKey, words, net) {
+            document.getElementById('privateViewKeyOutput').value = bytesToHex(kViewBytes);
+            document.getElementById('publicViewKeyOutput').value = bytesToHex(pubViewKey);
+            document.getElementById('publicSpendKeyOutput').value = bytesToHex(pubSpendKey);
+            document.getElementById('seedWords').value = words;
+            
+            // Store current address data for payment ID updates
+            currentAddressData = {
+              net,
+              pubViewKey,
+              pubSpendKey
+            };
+            
+            // Update address with current payment ID
+            updateAddress();
+          }
+        
+          async function generateTariAddress() {
+            document.getElementById('errorMessage').textContent = '';
+            clearOutputs();
+            
+            try {
+              const net = parseInt(document.getElementById('network').value);
+              
+              const seed = await generateNewCipherSeed();
+              const data33 = await encipherCipherSeed(seed, DEFAULT_CIPHER_SEED_PASSPHRASE);
+              const words = bytesToMnemonic(data33);
+              
+              // Use seed entropy directly as master key (16 bytes)
+              const masterKey = seed.entropy;
+              
+              // Derive keys using KeyManager approach
+              const kSpendScalar = keyManagerDomainSeparatedHash("derive_key", masterKey, "comms", 0);
+              const kSpendBytes = scalarToBytes(kSpendScalar);
+              const kViewScalar = keyManagerDomainSeparatedHash("derive_key", masterKey, "data encryption", 0);
+              const kViewBytes = scalarToBytes(kViewScalar);
+              
+              // Derive Public Keys
+              const pubSpendKey = RistrettoPoint.BASE.multiply(kSpendScalar).toRawBytes();
+              const pubViewKey = RistrettoPoint.BASE.multiply(kViewScalar).toRawBytes();
+              
+              setOutputs(kViewBytes, pubViewKey, pubSpendKey, words, net);
+              
+            } catch(e) {
+              console.error('Generation error:', e);
+              document.getElementById('errorMessage').textContent = 'Error: ' + e.message;
+            }
+          }
+
+          async function restoreTariAddress() {
+            document.getElementById('errorMessage').textContent = '';
+            clearOutputs();
+            
+            try {
+              const words = document.getElementById('seedWords').value.trim();
+              if (!words) {
+                throw new Error('Please enter seed words to restore');
+              }
+              
+              const net = parseInt(document.getElementById('network').value);
+              
+              const data33 = mnemonicToBytes(words);
+              const seed = await decipherCipherSeed(data33, DEFAULT_CIPHER_SEED_PASSPHRASE);
+              
+              // Use seed entropy directly as master key (16 bytes)
+              const masterKey = seed.entropy;
+              
+              // Derive keys using KeyManager approach
+              const kSpendScalar = keyManagerDomainSeparatedHash("derive_key", masterKey, "comms", 0);
+              const kSpendBytes = scalarToBytes(kSpendScalar);
+              const kViewScalar = keyManagerDomainSeparatedHash("derive_key", masterKey, "data encryption", 0);
+              const kViewBytes = scalarToBytes(kViewScalar);
+              
+              // Derive Public Keys
+              const pubSpendKey = RistrettoPoint.BASE.multiply(kSpendScalar).toRawBytes();
+              const pubViewKey = RistrettoPoint.BASE.multiply(kViewScalar).toRawBytes();
+              
+              setOutputs(kViewBytes, pubViewKey, pubSpendKey, words, net);
+              
+            } catch(e) {
+              console.error('Restoration error:', e);
+              document.getElementById('errorMessage').textContent = 'Error: ' + e.message;
+            }
+          }
+        
+          // Enable buttons and hide init message
+          document.getElementById('btnGenerate').disabled = false;
+          document.getElementById('btnRestore').disabled = false;
+          document.getElementById('initMessage').style.display = 'none';
+          
+          document.getElementById('btnGenerate').addEventListener('click', generateTariAddress);
+          document.getElementById('btnRestore').addEventListener('click', restoreTariAddress);
+          
+          // Add payment ID input listener
+          document.getElementById('paymentId').addEventListener('input', updateAddress);
+          document.getElementById('network').addEventListener('change', updateAddress);
+          
+          console.log('Tari Address Generator initialized successfully');
+        } catch (error) {
+          console.error('Failed to initialize Tari Generator:', error);
+          document.getElementById('errorMessage').textContent = 'Failed to initialize: ' + error.message;
+          document.getElementById('initMessage').textContent = 'Initialization failed. Please refresh the page.';
+        }
+      };
+    </script>
+
+    <script>
+// argon2-bundled.min.js
+!function(A,I){"object"==typeof exports&&"object"==typeof module?module.exports=I():"function"==typeof define&&define.amd?define([],I):"object"==typeof exports?exports.argon2=I():A.argon2=I()}(this,(function(){return(()=>{var A,I,g={773:(A,I,g)=>{var B,Q="undefined"!=typeof self&&void 0!==self.Module?self.Module:{},C={};for(B in Q)Q.hasOwnProperty(B)&&(C[B]=Q[B]);var E,i,o,D,e=[];E="object"==typeof window,i="function"==typeof importScripts,o="object"==typeof process&&"object"==typeof process.versions&&"string"==typeof process.versions.node,D=!E&&!o&&!i;var n,t,a,r,s,y="";o?(y=i?g(967).dirname(y)+"/":"//",n=function(A,I){return r||(r=g(145)),s||(s=g(967)),A=s.normalize(A),r.readFileSync(A,I?null:"utf8")},a=function(A){var I=n(A,!0);return I.buffer||(I=new Uint8Array(I)),G(I.buffer),I},process.argv.length>1&&process.argv[1].replace(/\\/g,"/"),e=process.argv.slice(2),A.exports=Q,process.on("uncaughtException",(function(A){if(!(A instanceof V))throw A})),process.on("unhandledRejection",u),Q.inspect=function(){return"[Emscripten Module object]"}):D?("undefined"!=typeof read&&(n=function(A){return read(A)}),a=function(A){var I;return"function"==typeof readbuffer?new Uint8Array(readbuffer(A)):(G("object"==typeof(I=read(A,"binary"))),I)},"undefined"!=typeof scriptArgs?e=scriptArgs:void 0!==arguments&&(e=arguments),"undefined"!=typeof print&&("undefined"==typeof console&&(console={}),console.log=print,console.warn=console.error="undefined"!=typeof printErr?printErr:print)):(E||i)&&(i?y=self.location.href:"undefined"!=typeof document&&document.currentScript&&(y=document.currentScript.src),y=0!==y.indexOf("blob:")?y.substr(0,y.lastIndexOf("/")+1):"",n=function(A){var I=new XMLHttpRequest;return I.open("GET",A,!1),I.send(null),I.responseText},i&&(a=function(A){var I=new XMLHttpRequest;return I.open("GET",A,!1),I.responseType="arraybuffer",I.send(null),new Uint8Array(I.response)}),t=function(A,I,g){var B=new XMLHttpRequest;B.open("GET",A,!0),B.responseType="arraybuffer",B.onload=function(){200==B.status||0==B.status&&B.response?I(B.response):g()},B.onerror=g,B.send(null)}),Q.print||console.log.bind(console);var F,c,w=Q.printErr||console.warn.bind(console);for(B in C)C.hasOwnProperty(B)&&(Q[B]=C[B]);C=null,Q.arguments&&(e=Q.arguments),Q.thisProgram&&Q.thisProgram,Q.quit&&Q.quit,Q.wasmBinary&&(F=Q.wasmBinary),Q.noExitRuntime,"object"!=typeof WebAssembly&&u("no native wasm support detected");var h=!1;function G(A,I){A||u("Assertion failed: "+I)}var N,R,f="undefined"!=typeof TextDecoder?new TextDecoder("utf8"):void 0;function U(A){N=A,Q.HEAP8=new Int8Array(A),Q.HEAP16=new Int16Array(A),Q.HEAP32=new Int32Array(A),Q.HEAPU8=R=new Uint8Array(A),Q.HEAPU16=new Uint16Array(A),Q.HEAPU32=new Uint32Array(A),Q.HEAPF32=new Float32Array(A),Q.HEAPF64=new Float64Array(A)}Q.INITIAL_MEMORY;var M,Y=[],S=[],H=[],d=0,k=null,J=null;function u(A){throw Q.onAbort&&Q.onAbort(A),w(A+=""),h=!0,A="abort("+A+"). Build with -s ASSERTIONS=1 for more info.",new WebAssembly.RuntimeError(A)}function p(A){return A.startsWith("data:application/octet-stream;base64,")}function L(A){return A.startsWith("file://")}Q.preloadedImages={},Q.preloadedAudios={};var l,K="argon2.wasm";function q(A){try{if(A==K&&F)return new Uint8Array(F);if(a)return a(A);throw"both async and sync fetching of the wasm failed"}catch(A){u(A)}}function b(A){for(;A.length>0;){var I=A.shift();if("function"!=typeof I){var g=I.func;"number"==typeof g?void 0===I.arg?M.get(g)():M.get(g)(I.arg):g(void 0===I.arg?null:I.arg)}else I(Q)}}function x(A){try{return c.grow(A-N.byteLength+65535>>>16),U(c.buffer),1}catch(A){}}p(K)||(l=K,K=Q.locateFile?Q.locateFile(l,y):y+l);var m,X={a:function(A,I,g){R.copyWithin(A,I,I+g)},b:function(A){var I,g=R.length,B=2147418112;if((A>>>=0)>B)return!1;for(var Q=1;Q<=4;Q*=2){var C=g*(1+.2/Q);if(C=Math.min(C,A+100663296),x(Math.min(B,((I=Math.max(A,C))%65536>0&&(I+=65536-I%65536),I))))return!0}return!1}},W=(function(){var A={a:X};function I(A,I){var g,B=A.exports;Q.asm=B,U((c=Q.asm.c).buffer),M=Q.asm.k,g=Q.asm.d,S.unshift(g),function(A){if(d--,Q.monitorRunDependencies&&Q.monitorRunDependencies(d),0==d&&(null!==k&&(clearInterval(k),k=null),J)){var I=J;J=null,I()}}()}function g(A){I(A.instance)}function B(I){return function(){if(!F&&(E||i)){if("function"==typeof fetch&&!L(K))return fetch(K,{credentials:"same-origin"}).then((function(A){if(!A.ok)throw"failed to load wasm binary file at '"+K+"'";return A.arrayBuffer()})).catch((function(){return q(K)}));if(t)return new Promise((function(A,I){t(K,(function(I){A(new Uint8Array(I))}),I)}))}return Promise.resolve().then((function(){return q(K)}))}().then((function(I){return WebAssembly.instantiate(I,A)})).then(I,(function(A){w("failed to asynchronously prepare wasm: "+A),u(A)}))}if(d++,Q.monitorRunDependencies&&Q.monitorRunDependencies(d),Q.instantiateWasm)try{return Q.instantiateWasm(A,I)}catch(A){return w("Module.instantiateWasm callback failed with error: "+A),!1}F||"function"!=typeof WebAssembly.instantiateStreaming||p(K)||L(K)||"function"!=typeof fetch?B(g):fetch(K,{credentials:"same-origin"}).then((function(I){return WebAssembly.instantiateStreaming(I,A).then(g,(function(A){return w("wasm streaming compile failed: "+A),w("falling back to ArrayBuffer instantiation"),B(g)}))}))}(),Q.___wasm_call_ctors=function(){return(Q.___wasm_call_ctors=Q.asm.d).apply(null,arguments)},Q._argon2_hash=function(){return(Q._argon2_hash=Q.asm.e).apply(null,arguments)},Q._malloc=function(){return(W=Q._malloc=Q.asm.f).apply(null,arguments)}),T=(Q._free=function(){return(Q._free=Q.asm.g).apply(null,arguments)},Q._argon2_verify=function(){return(Q._argon2_verify=Q.asm.h).apply(null,arguments)},Q._argon2_error_message=function(){return(Q._argon2_error_message=Q.asm.i).apply(null,arguments)},Q._argon2_encodedlen=function(){return(Q._argon2_encodedlen=Q.asm.j).apply(null,arguments)},Q._argon2_hash_ext=function(){return(Q._argon2_hash_ext=Q.asm.l).apply(null,arguments)},Q._argon2_verify_ext=function(){return(Q._argon2_verify_ext=Q.asm.m).apply(null,arguments)},Q.stackAlloc=function(){return(T=Q.stackAlloc=Q.asm.n).apply(null,arguments)});function V(A){this.name="ExitStatus",this.message="Program terminated with exit("+A+")",this.status=A}function j(A){function I(){m||(m=!0,Q.calledRun=!0,h||(b(S),Q.onRuntimeInitialized&&Q.onRuntimeInitialized(),function(){if(Q.postRun)for("function"==typeof Q.postRun&&(Q.postRun=[Q.postRun]);Q.postRun.length;)A=Q.postRun.shift(),H.unshift(A);var A;b(H)}()))}A=A||e,d>0||(function(){if(Q.preRun)for("function"==typeof Q.preRun&&(Q.preRun=[Q.preRun]);Q.preRun.length;)A=Q.preRun.shift(),Y.unshift(A);var A;b(Y)}(),d>0||(Q.setStatus?(Q.setStatus("Running..."),setTimeout((function(){setTimeout((function(){Q.setStatus("")}),1),I()}),1)):I()))}if(Q.allocate=function(A,I){var g;return g=1==I?T(A.length):W(A.length),A.subarray||A.slice?R.set(A,g):R.set(new Uint8Array(A),g),g},Q.UTF8ToString=function(A,I){return A?function(A,I,g){for(var B=I+g,Q=I;A[Q]&&!(Q>=B);)++Q;if(Q-I>16&&A.subarray&&f)return f.decode(A.subarray(I,Q));for(var C="";I<Q;){var E=A[I++];if(128&E){var i=63&A[I++];if(192!=(224&E)){var o=63&A[I++];if((E=224==(240&E)?(15&E)<<12|i<<6|o:(7&E)<<18|i<<12|o<<6|63&A[I++])<65536)C+=String.fromCharCode(E);else{var D=E-65536;C+=String.fromCharCode(55296|D>>10,56320|1023&D)}}else C+=String.fromCharCode((31&E)<<6|i)}else C+=String.fromCharCode(E)}return C}(R,A,I):""},Q.ALLOC_NORMAL=0,J=function A(){m||j(),m||(J=A)},Q.run=j,Q.preInit)for("function"==typeof Q.preInit&&(Q.preInit=[Q.preInit]);Q.preInit.length>0;)Q.preInit.pop()();j(),A.exports=Q,Q.unloadRuntime=function(){"undefined"!=typeof self&&delete self.Module,Q=c=M=N=R=void 0,delete A.exports}},631:function(A,I,g){var B,Q;"undefined"!=typeof self&&self,void 0===(Q="function"==typeof(B=function(){const A="undefined"!=typeof self?self:this,I={Argon2d:0,Argon2i:1,Argon2id:2};function B(I){if(B._promise)return B._promise;if(B._module)return Promise.resolve(B._module);let C;return C=A.process&&A.process.versions&&A.process.versions.node?Q().then((A=>new Promise((I=>{A.postRun=()=>I(A)})))):(A.loadArgon2WasmBinary?A.loadArgon2WasmBinary():Promise.resolve(g(721)).then((A=>function(A){const I=atob(A),g=new Uint8Array(new ArrayBuffer(I.length));for(let A=0;A<I.length;A++)g[A]=I.charCodeAt(A);return g}(A)))).then((g=>function(I,g){return new Promise((B=>(A.Module={wasmBinary:I,wasmMemory:g,postRun(){B(Module)}},Q())))}(g,I?function(A){const I=1024,g=64*I,B=(1024*I*1024*2-64*I)/g,Q=Math.min(Math.max(Math.ceil(A*I/g),256)+256,B);return new WebAssembly.Memory({initial:Q,maximum:B})}(I):void 0))),B._promise=C,C.then((A=>(B._module=A,delete B._promise,A)))}function Q(){return A.loadArgon2WasmModule?A.loadArgon2WasmModule():Promise.resolve(g(773))}function C(A,I){return A.allocate(I,"i8",A.ALLOC_NORMAL)}function E(A,I){return C(A,new Uint8Array([...I,0]))}function i(A){if("string"!=typeof A)return A;if("function"==typeof TextEncoder)return(new TextEncoder).encode(A);if("function"==typeof Buffer)return Buffer.from(A);throw new Error("Don't know how to encode UTF8")}return{ArgonType:I,hash:function(A){const g=A.mem||1024;return B(g).then((B=>{const Q=A.time||1,o=A.parallelism||1,D=i(A.pass),e=E(B,D),n=D.length,t=i(A.salt),a=E(B,t),r=t.length,s=A.type||I.Argon2d,y=B.allocate(new Array(A.hashLen||24),"i8",B.ALLOC_NORMAL),F=A.secret?C(B,A.secret):0,c=A.secret?A.secret.byteLength:0,w=A.ad?C(B,A.ad):0,h=A.ad?A.ad.byteLength:0,G=A.hashLen||24,N=B._argon2_encodedlen(Q,g,o,r,G,s),R=B.allocate(new Array(N+1),"i8",B.ALLOC_NORMAL);let f,U,M;try{U=B._argon2_hash_ext(Q,g,o,e,n,a,r,y,G,R,N,s,F,c,w,h,19)}catch(A){f=A}if(0!==U||f){try{f||(f=B.UTF8ToString(B._argon2_error_message(U)))}catch(A){}M={message:f,code:U}}else{let A="";const I=new Uint8Array(G);for(let g=0;g<G;g++){const Q=B.HEAP8[y+g];I[g]=Q,A+=("0"+(255&Q).toString(16)).slice(-2)}M={hash:I,hashHex:A,encoded:B.UTF8ToString(R)}}try{B._free(e),B._free(a),B._free(y),B._free(R),w&&B._free(w),F&&B._free(F)}catch(A){}if(f)throw M;return M}))},verify:function(A){return B().then((g=>{const B=i(A.pass),Q=E(g,B),o=B.length,D=A.secret?C(g,A.secret):0,e=A.secret?A.secret.byteLength:0,n=A.ad?C(g,A.ad):0,t=A.ad?A.ad.byteLength:0,a=E(g,i(A.encoded));let r,s,y,F=A.type;if(void 0===F){let g=A.encoded.split("$")[1];g&&(g=g.replace("a","A"),F=I[g]||I.Argon2d)}try{s=g._argon2_verify_ext(a,Q,o,D,e,n,t,F)}catch(A){r=A}if(s||r){try{r||(r=g.UTF8ToString(g._argon2_error_message(s)))}catch(A){}y={message:r,code:s}}try{g._free(Q),g._free(a)}catch(A){}if(r)throw y;return y}))},unloadRuntime:function(){B._module&&(B._module.unloadRuntime(),delete B._promise,delete B._module)}}})?B.apply(I,[]):B)||(A.exports=Q)},721:function(A,I){A.exports="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DwtBixEPC0GeEyEBCyABC48DAQF/IwBBgANrIgQkACAEQQA2AowBIARBjAFqIAEQBwJAIAFBwABNBEAgBEGQAWogARAYQQBIDQEgBEGQAWogBEGMAWpBBBAGQQBIDQEgBEGQAWogAiADEAZBAEgNASAEQZABaiAAIAEQEhoMAQsgBEGQAWpBwAAQGEEASA0AIARBkAFqIARBjAFqQQQQBkEASA0AIARBkAFqIAIgAxAGQQBIDQAgBEGQAWogBEFAa0HAABASQQBIDQAgACAEKQNANwAAIAAgBCkDSDcACCAAIAQpA1g3ABggACAEKQNQNwAQIABBIGohACABQSBrIgJBwQBPBEADQCAEIARBQGtBwAAQBSIBQUBrQcAAIAEQMUEASA0CIAAgASkDQDcAACAAIAEpA0g3AAggACAEKQNYNwAYIAAgBCkDUDcAECAAQSBqIQAgAkEgayICQcAASw0ACwsgBCAEQUBrQcAAEAUiAUFAayACIAEQMUEASA0AIAAgAUFAayACEAUaCyAEQZABakHwARAEIARBgANqJAALAwABC5kCACAARQRAQQAPCwJ/AkAgAAR/IAFB/wBNDQECQEGgHigCACgCAEUEQCABQYB/cUGAvwNGDQMMAQsgAUH/D00EQCAAIAFBP3FBgAFyOgABIAAgAUEGdkHAAXI6AABBAgwECyABQYCwA09BACABQYBAcUGAwANHG0UEQCAAIAFBP3FBgAFyOgACIAAgAUEMdkHgAXI6AAAgACABQQZ2QT9xQYABcjoAAUEDDAQLIAFBgIAEa0H//z9NBEAgACABQT9xQYABcjoAAyAAIAFBEnZB8AFyOgAAIAAgAUEGdkE/cUGAAXI6AAIgACABQQx2QT9xQYABcjoAAUEEDAQLC0HcHkEZNgIAQX8FQQELDAELIAAgAToAAEEBCwtQAQN/AkAgACgCACwAABAPRQRADAELA0AgACgCACICLAAAIQMgACACQQFqNgIAIAEgA2pBMGshASACLAABEA9FDQEgAUEKbCEBDAALAAsgAQu7AgACQCABQRRLDQACQAJAAkACQAJAAkACQAJAAkACQCABQQlrDgoAAQIDBAUGBwgJCgsgAiACKAIAIgFBBGo2AgAgACABKAIANgIADwsgAiACKAIAIgFBBGo2AgAgACABNAIANwMADwsgAiACKAIAIgFB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AUHjFEEDEBANACABQQNqIANBDGoQFSIBRQ0AIAAgAygCDDYCKCABQecUQQMQEA0AIAFBA2ogA0EMahAVIgFFDQAgACADKAIMIgQ2AjAgACAENgI0IAEtAABBJEcNACADIAc2AgwgACgCECADQQxqIAFBAWoQLCIBRQ0AIAAgAygCDDYCFCABLQAAQSRHDQAgAyAGNgIMIAAoAgAgA0EMaiABQQFqECwiAUUNACAAIAMoAgw2AgQgAEEANgJEIABCADcCPCAAQgA3AhggAEIANwIgIAAQHCICDQBBYEEAIAEtAAAbIQILIANBEGokACACCykBAn8DQCAAIAJBA3QiA2ogASADaikAADcDACACQQFqIgJBgAFHDQALCwwAIABBAEGACBALGgtlAQJ/IAAgAhAeIgIEfyACBUFdQQACfyAAKAIAIQRBACECIAAoAgQiAAR/A0AgAyACIARqLQAAIAEgAmotAABzciEDIAJBAWoiAiAARw0ACyADQQFrQQh2QQFxQQFrBUEACwsbCwtdAQJ/IwBB8AFrIgMkAEF/IQQCQCACRSAARSABRXJyIAFBwABLcg0AIAMgARAYQQBIDQAgAyACQcAAEAZBAEgNACADIAAgARASIQQLIANB8AEQBCADQfABaiQAIAQLCQAgACABNwAACxAAIwAgAGtBcHEiACQAIAALMwEBfyAAKAIUIgMgASACIAAoAhAgA2siASABIAJLGyIBEAUaIAAgACgCFCABajYCFCACC9oBAQR/IwBB0ABrIggkAAJAIABFBEBBYCEADAELIAggABAKIgk2AgwgCCAJNgIcIAggCRAJIgo2AhggCCAJEAkiCzYCCEEAIQkCQAJAIApFIAtFcg0AIAggAjYCFCAIIAE2AhAgCEEIaiAAIAcQLSIADQEgCCgCCCEJIAggCCgCDBAJIgA2AgggAEUNACAIIAY2AiwgCCAFNgIoIAggBDYCJCAIIAM2AiAgCEEIaiAJIAcQMCEADAELQWohAAsgCCgCGBAIIAgoAggQCCAJEAgLIAhB0ABqJAAgAAuQAgEDfyMAQdAAayIRJABBfiETAkAgCEEESQ0AIAgQCSISRQRAQWohEwwBCyARQQA2AkwgEUIANwJEIBEgAjYCPCARIAI2AjggESABNgI0IBEgADYCMCARIA82AiwgESAONgIoIBEgDTYCJCAR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IGxvbmcgb3IgdG9vIHNob3J0AE1pc3NpbmcgYXJndW1lbnRzAFRvbyBtYW55IGxhbmVzAFRvbyBmZXcgbGFuZXMAVG9vIG1hbnkgdGhyZWFkcwBOb3QgZW5vdWdoIHRocmVhZHMATWVtb3J5IGFsbG9jYXRpb24gZXJyb3IATWVtb3J5IGNvc3QgaXMgdG9vIHNtYWxsAFRpbWUgY29zdCBpcyB0b28gc21hbGwAYXJnb24yaQBBcmdvbjJpAFRoZSBwYXNzd29yZCBkb2VzIG5vdCBtYXRjaCB0aGUgc3VwcGxpZWQgaGFzaABPdXRwdXQgcG9pbnRlciBtaXNtYXRjaABPdXRwdXQgaXMgdG9vIGxvbmcAU2FsdCBpcyB0b28gbG9uZwBTZWNyZXQgaXMgdG9vIGxvbmcAUGFzc3dvcmQgaXMgdG9vIGxvbmcAQXNzb2NpYXRlZCBkYXRhIGlzIHRvbyBsb25nAFRocmVhZGluZyBmYWlsdXJlAE1lbW9yeSBjb3N0IGlzIHRvbyBsYXJnZQBUaW1lIGNvc3QgaXMgdG9vIGxhcmdlAFVua25vd24gZXJyb3IgY29kZQBhcmdvbjJpZABBcmdvbjJpZABFbmNvZGluZyBmYWlsZWQARGVjb2RpbmcgZmFpbGVkAGFyZ29uMmQAQXJnb24yZABBcmdvbjJfQ29udGV4dCBjb250ZXh0IGlzIE5VTEwAT3V0cHV0IHBvaW50ZXIgaXMgTlVMTABUaGUgYWxsb2NhdGUgbWVtb3J5IGNhbGxiYWNrIGlzIE5VTEwAVGhlIGZyZWUgbWVtb3J5IGNhbGxiYWNrIGlzIE5VTEwAT0sAJHY9ACx0PQAscD0AJG09AFRoZXJlIGlzIG5vIHN1Y2ggdmVyc2lvbiBvZiBBcmdvbjIAU2FsdCBwb2ludGVyIGlzIE5VTEwsIGJ1dCBzYWx0IGxlbmd0aCBpcyBub3QgMABTZWNyZXQgcG9pbnRlciBpcyBOVUxMLCBidXQgc2VjcmV0IGxlbmd0aCBpcyBub3QgMABQYXNzd29yZCBwb2ludGVyIGlzIE5VTEwsIGJ1dCBwYXNzd29yZCBsZW5ndGggaXMgbm90IDAAQXNzb2NpYXRlZCBkYXRhIHBvaW50ZXIgaXMgTlVMTCwgYnV0IGFkIGxlbmd0aCBpcyBub3QgMAAobnVsbCkAAACbCAAAuwcAAEkJAADACQAAsAkAAPAHAAAfCAAAMAgAAMkIAABvCgAA4AkAABYKAAA7CgAAQwgAACsLAADBCgAAkgoAAPQKAAACCAAAEQgAAFsJAABbCAAAdAkAAHQIAAAFCQAAdAcAAC0JAACeBwAA9AgAAGIHAAAYCQAAiAcAAOEIAABOBwAA/wkAAFwKAAABAEGkGAsBAgBByxgLBf//////AEGQGQtBEQAKABEREQAAAAAFAAAAAAAACQAAAAALAAAAAAAAAAARAA8KERERAwoHAAEACQsLAAAJBgsAAAsABhEAAAAREREAQeEZCyELAAAAAAAAAAARAAoKERERAAoAAAIACQsAAAAJAAsAAAsAQZsaCwEMAEGnGgsVDAAAAAAMAAAAAAkMAAAAAAAMAAAMAEHVGgsBDgBB4RoLFQ0AAAAEDQAAAAAJDgAAAAAADgAADgBBjxsLARAAQZsbCx4PAAAAAA8AAAAACRAAAAAAABAAABAAABIAAAASEhIAQdIbCw4SAAAAEhISAAAAAAAACQBBgxwLAQsAQY8cCxUKAAAAAAoAAAAACQsAAAAAAAsAAAsAQb0cCwEMAEHJHAsnDAAAAAAMAAAAAAkMAAAAAAAMAAAMAAAwMTIzNDU2Nzg5QUJDREVGAEHwHAsBAQBBoB4LAogPAEHYHgsDkBFQ"},145:()=>{},967:()=>{}},B={};function Q(A){var I=B[A];if(void 0!==I)return I.exports;var C=B[A]={exports:{}};return g[A].call(C.exports,C,C.exports,Q),C.exports}return I=Object.getPrototypeOf?A=>Object.getPrototypeOf(A):A=>A.__proto__,Q.t=function(g,B){if(1&B&&(g=this(g)),8&B)return g;if("object"==typeof g&&g){if(4&B&&g.__esModule)return g;if(16&B&&"function"==typeof g.then)return g}var C=Object.create(null);Q.r(C);var E={};A=A||[null,I({}),I([]),I(I)];for(var i=2&B&&g;"object"==typeof i&&!~A.indexOf(i);i=I(i))Object.getOwnPropertyNames(i).forEach((A=>E[A]=()=>g[A]));return E.default=()=>g,Q.d(C,E),C},Q.d=(A,I)=>{for(var g in I)Q.o(I,g)&&!Q.o(A,g)&&Object.defineProperty(A,g,{enumerable:!0,get:I[g]})},Q.o=(A,I)=>Object.prototype.hasOwnProperty.call(A,I),Q.r=A=>{"undefined"!=typeof Symbol&&Symbol.toStringTag&&Object.defineProperty(A,Symbol.toStringTag,{value:"Module"}),Object.defineProperty(A,"__esModule",{value:!0})},Q(631)})()}));
+
+// Call initTariGenerator after argon2 is loaded
+initTariGenerator();
+    </script>
+</body>
+</html>

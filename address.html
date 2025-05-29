@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Tari Address Generator</title>
+
+    <style>
+        body { font-family: sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
+        .container { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        h1 { color: #BF4A8A; } /* Tari Purple */
+        label { display: block; margin-top: 10px; font-weight: bold; }
+        input[type="text"], textarea, select {
+            width: calc(100% - 22px);
+            padding: 10px;
+            margin-top: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        textarea { resize: vertical; min-height: 80px; }
+        button {
+            background-color: #FF6B00; /* Tari Orange */
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 20px;
+            margin-right: 10px;
+        }
+        button:hover:not(:disabled) { background-color: #E05A00; }
+        button:disabled { 
+            background-color: #ccc; 
+            cursor: not-allowed; 
+            opacity: 0.6;
+        }
+        .output-group { margin-top: 15px; }
+        .output-group p {
+            background-color: #e9e9e9;
+            padding: 8px;
+            border-radius: 3px;
+            word-break: break-all;
+        }
+        .error { color: red; margin-top: 10px; }
+        .emoji-output { 
+            font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif; 
+            font-size: 1.2em; 
+            line-height: 1.5; 
+            word-break: break-all; 
+        }
+        .initializing { color: #666; font-style: italic; }
+        .small-text { font-size: 0.8em; color: #666; margin-top: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Tari Address Generator</h1>
+
+        <select id="network">
+            <option value="0" selected>MainNet (0x00)</option>
+            <option value="2">NextNet (0x02)</option>
+            <option value="38">Esmeralda (0x26)</option>
+        </select>
+
+        <label for="seedWords">Seed Words (24 words, English, space-separated):</label>
+        <textarea id="seedWords" rows="3" placeholder="Enter existing seed words to restore, or leave empty to generate new address"></textarea>
+
+        <button id="btnGenerate" disabled>Generate New Address</button>
+        <button id="btnRestore" disabled>Restore From Seed Words</button>
+        
+        <div id="errorMessage" class="error"></div>
+        <div id="initMessage" class="initializing">Initializing address generator...</div>
+
+        <div class="output-group">
+            <label>Private View Key (hex):</label>
+            <input type="text" id="privateViewKeyOutput" readonly>
+        </div>
+        <div class="output-group">
+            <label>Public View Key (hex):</label>
+            <input type="text" id="publicViewKeyOutput" readonly>
+        </div>
+        <div class="output-group">
+            <label>Public Spend Key (hex):</label>
+            <input type="text" id="publicSpendKeyOutput" readonly>
+        </div>
+        <div class="output-group">
+            <label for="paymentId">Payment ID (optional):</label>
+            <input type="text" id="paymentId" placeholder="Enter payment ID to create integrated address">
+            <div class="small-text">Leave empty for standard address. Adding a payment ID creates an integrated address.</div>
+        </div>
+        <div class="output-group">
+            <label>Tari Address (Base58):</label>
+            <input type="text" id="tariAddressOutput" readonly>
+        </div>
+        <div class="output-group">
+            <label>Emoji Address:</label>
+            <textarea id="emojiAddressOutput" readonly rows="3" class="emoji-output"></textarea>
+        </div>
+    </div>
+
+    <script src="tari-generator.js"></script>
+
+    <script>
+      window.initTariGenerator = async function() {
+        try {        
+          const ed25519Module = window.ed25519Module;
+          const { blake2b } = window.blake2bModule;
+          const { wordlist } = window.wordlistModule;
+          const bs58 = window.bs58Module;
+          const { chacha20 } = window.chachaModule;
+          const CRC32 = window.crc32Module;
+    
+          const { RistrettoPoint } = ed25519Module;
+          const curveOrder = ed25519Module.ed25519.CURVE.n;
+          const wordlistEnglish = wordlist;
+
+          const { hash, ArgonType } = window.argon2;
+          const bs58encode = input =>
+            bs58.default.encode(
+              input instanceof Uint8Array ? input : new TextEncoder().encode(input)
+            );
+
+          // Constants
+          const CIPHER_SEED_VERSION = 0x02;
+          const BIRTHDAY_GENESIS_FROM_UNIX_EPOCH = 1640995200;
+          const SECONDS_PER_DAY = 86400;
+          const DEFAULT_CIPHER_SEED_PASSPHRASE = 'TARI_CIPHER_SEED';
+          const TARI_ADDRESS_FEATURES_ONE_SIDED = 0x01;
+          const TARI_ADDRESS_FEATURES_PAYMENT_ID = 0x04;
+
+          // Emoji mapping from emoji.rs
+          const EMOJI_MAP = [
+            '🐢', '📟', '🌈', '🌊', '🎯', '🐋', '🌙', '🤔', '🌕', '⭐', '🎋', '🌰', '🌴', '🌵', '🌲', '🌸', '🌹', '🌻', '🌽',
+            '🍀', '🍁', '🍄', '🥑', '🍆', '🍇', '🍈', '🍉', '🍊', '🍋', '🍌', '🍍', '🍎', '🍐', '🍑', '🍒', '🍓', '🍔', '🍕',
+            '🍗', '🍚', '🍞', '🍟', '🥝', '🍣', '🍦', '🍩', '🍪', '🍫', '🍬', '🍭', '🍯', '🥐', '🍳', '🥄', '🍵', '🍶', '🍷',
+            '🍸', '🍾', '🍺', '🍼', '🎀', '🎁', '🎂', '🎃', '🤖', '🎈', '🎉', '🎒', '🎓', '🎠', '🎡', '🎢', '🎣', '🎤', '🎥',
+            '🎧', '🎨', '🎩', '🎪', '🎬', '🎭', '🎮', '🎰', '🎱', '🎲', '🎳', '🎵', '🎷', '🎸', '🎹', '🎺', '🎻', '🎼', '🎽',
+            '🎾', '🎿', '🏀', '🏁', '🏆', '🏈', '⚽', '🏠', '🏥', '🏦', '🏭', '🏰', '🐀', '🐉', '🐊', '🐌', '🐍', '🦁', '🐐',
+            '🐑', '🐔', '🙈', '🐗', '🐘', '🐙', '🐚', '🐛', '🐜', '🐝', '🐞', '🦋', '🐣', '🐨', '🦀', '🐪', '🐬', '🐭', '🐮',
+            '🐯', '🐰', '🦆', '🦂', '🐴', '🐵', '🐶', '🐷', '🐸', '🐺', '🐻', '🐼', '🐽', '🐾', '👀', '👅', '👑', '👒', '🧢',
+            '💅', '👕', '👖', '👗', '👘', '👙', '💃', '👛', '👞', '👟', '👠', '🥊', '👢', '👣', '🤡', '👻', '👽', '👾', '🤠',
+            '👃', '💄', '💈', '💉', '💊', '💋', '👂', '💍', '💎', '💐', '💔', '🔒', '🧩', '💡', '💣', '💤', '💦', '💨', '💩',
+            '➕', '💯', '💰', '💳', '💵', '💺', '💻', '💼', '📈', '📜', '📌', '📎', '📖', '📿', '📡', '⏰', '📱', '📷', '🔋',
+            '🔌', '🚰', '🔑', '🔔', '🔥', '🔦', '🔧', '🔨', '🔩', '🔪', '🔫', '🔬', '🔭', '🔮', '🔱', '🗽', '😂', '😇', '😈',
+            '🤑', '😍', '😎', '😱', '😷', '🤢', '👍', '👶', '🚀', '🚁', '🚂', '🚚', '🚑', '🚒', '🚓', '🛵', '🚗', '🚜', '🚢',
+            '🚦', '🚧', '🚨', '🚪', '🚫', '🚲', '🚽', '🚿', '🧲'
+          ];
+        
+          // Global state for current address
+          let currentAddressData = null;
+
+          // Utility functions
+          function timingSafeEqual(a, b) {
+            if (a.length !== b.length) return false;
+            let diff = 0;
+            for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+            return diff === 0;
+          }
+          
+          function bytesToHex(b) { return Array.from(b).map(x=>x.toString(16).padStart(2,'0')).join(''); }
+          function hexToBytes(hex) {
+            if (hex.startsWith('0x')) hex = hex.slice(2);
+            if (hex.length % 2) hex = '0' + hex;
+            const bytes = new Uint8Array(hex.length / 2);
+            for (let i = 0; i < bytes.length; i++) {
+              bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+            }
+            return bytes;
+          }
+          function u64ToLeBytes(v,len=8) { const b=new Uint8Array(len); let val=BigInt(v); for(let i=0;i<len;i++){b[i]=Number((val>>(BigInt(i)*8n))&0xFFn);} return b; }
+          function leBytesToU64(b){let v=0n;for(let i=b.length-1;i>=0;i--)v=(v<<8n)|BigInt(b[i]);return v;}
+          function concatBytes(...arrs){const o=new Uint8Array(arrs.reduce((s,a)=>s+a.length,0));let off=0;for(const a of arrs){o.set(a,off);off+=a.length;}return o;}
+          function textToBytes(t){return new TextEncoder().encode(t);}
+          async function generateRandomBytes(n){return crypto.getRandomValues(new Uint8Array(n));}
+
+          // Scalar operations
+          function bytesToScalar(bytes) {
+            let scalar = 0n;
+            for (let i = bytes.length - 1; i >= 0; i--) {
+              scalar = (scalar << 8n) | BigInt(bytes[i]);
+            }
+            return scalar % curveOrder;
+          }
+          
+          function scalarToBytes(scalar) {
+            const bytes = new Uint8Array(32);
+            let s = BigInt(scalar);
+            for (let i = 0; i < 32; i++) {
+              bytes[i] = Number(s & 0xFFn);
+              s >>= 8n;
+            }
+            return bytes;
+          }
+
+          // Domain separated hasher for CipherSeed operations
+          function domainSeparatedHash(hashSize, label, ...data) {
+            const domain = "com.tari.base_layer.key_manager";
+            const version = 1;
+            const domainSeparationTag = `${domain}.v${version}.${label}`;
+            
+            let input = new Uint8Array(0);
+            const tagBytes = textToBytes(domainSeparationTag);
+            const tagLengthBytes = u64ToLeBytes(tagBytes.length);
+            input = concatBytes(input, tagLengthBytes, tagBytes);
+            
+            for (let i = 0; i < data.length; i++) {
+              const dataLengthBytes = u64ToLeBytes(data[i].length);
+              input = concatBytes(input, dataLengthBytes, data[i]);
+            }
+            
+            return blake2b(input, { dkLen: hashSize });
+          }
+
+          // KeyManager domain separated hasher for key derivation
+          function keyManagerDomainSeparatedHash(label, masterKey, branchSeed, keyIndex) {
+            const domain = "com.tari.base_layer.key_manager";
+            const version = 1;
+            const domainSeparationTag = `${domain}.v${version}.${label}`;
+            
+            const tagBytes = textToBytes(domainSeparationTag);
+            const tagLengthBytes = u64ToLeBytes(tagBytes.length);
+            const masterKeyLengthBytes = u64ToLeBytes(masterKey.length);
+            const branchSeedBytes = textToBytes(branchSeed);
+            const branchSeedLengthBytes = u64ToLeBytes(branchSeedBytes.length);
+            const keyIndexBytes = u64ToLeBytes(keyIndex);
+            const keyIndexLengthBytes = u64ToLeBytes(keyIndexBytes.length);
+            
+            const input = concatBytes(
+              tagLengthBytes,
+              tagBytes,
+              masterKeyLengthBytes,
+              masterKey,
+              branchSeedLengthBytes,
+              branchSeedBytes,
+              keyIndexLengthBytes,
+              keyIndexBytes
+            );
+            
+            const result = blake2b(input, { dkLen: 64 });
+            return bytesToScalar(result);
+          }
+
+          // CipherSeed functions
+          async function deriveCipherSeedKeys(pass, salt) {
+            const argonSalt = domainSeparatedHash(32, 'cipher_seed_pbkdf_salt', salt).slice(0, 16);
+            const passBytes = textToBytes(pass);
+            
+            const res = await hash({
+              pass: passBytes,
+              salt: argonSalt,
+              time: 1,
+              mem: 46 * 1024,
+              parallelism: 1,
+              type: ArgonType.Argon2d,
+              hashLen: 64
+            });
+            
+            const hashBytes = res.hash;
+            const encryptionKey = hashBytes.slice(0, 32);
+            const macKey = hashBytes.slice(32);
+            
+            return { encryptionKey, macKey };
+          }
+          
+          function generateCipherSeedMac(version, birthday, entropy, salt, macKey){
+            const result = domainSeparatedHash(
+              32, 
+              'cipher_seed_mac',
+              new Uint8Array([version]),
+              birthday,
+              entropy,
+              salt,
+              macKey
+            );
+            return result.slice(0, 5);
+          }
+          
+          function applyCipherSeedStreamCipher(data, key, salt){
+            const nonceFull = domainSeparatedHash(32, 'cipher_seed_encryption_nonce', salt);
+            const nonce = nonceFull.slice(0, 12);
+            
+            const keyBytes = new Uint8Array(32);
+            const nonceBytes = new Uint8Array(12);
+            keyBytes.set(key.slice(0, 32));
+            nonceBytes.set(nonce.slice(0, 12));
+            
+            const result = chacha20(keyBytes, nonceBytes, data);
+            data.set(result);
+            return data;
+          }
+        
+          async function encipherCipherSeed(seed, pass) {
+            const { encryptionKey, macKey } = await deriveCipherSeedKeys(pass, seed.salt);
+            const bBytes = u64ToLeBytes(seed.birthday, 2);
+            const mac = generateCipherSeedMac(seed.version, bBytes, seed.entropy, seed.salt, macKey);
+            const secret = concatBytes(bBytes, seed.entropy, mac);
+            
+            applyCipherSeedStreamCipher(secret, encryptionKey, seed.salt);
+            
+            const payload = concatBytes(Uint8Array.of(seed.version), secret, seed.salt);
+            const crc = CRC32.default.buf(payload);
+            const cs = new Uint8Array(4); 
+            new DataView(cs.buffer).setUint32(0, crc>>>0, true);
+            
+            return concatBytes(payload, cs);
+          }
+
+          async function decipherCipherSeed(data, pass) {
+            const encLen = 1+23+5+4;
+            if(data.length!==encLen) throw new Error('Invalid seed length');
+            const body = data.slice(0,1+23+5);
+            const chk = data.slice(-4);
+            const expectedCrc = new Uint8Array(4);
+            new DataView(expectedCrc.buffer).setUint32(0, CRC32.default.buf(body)>>>0, true);
+            if(!timingSafeEqual(chk, expectedCrc)) throw new Error('CRC failed');
+            const version=data[0]; if(version!==CIPHER_SEED_VERSION) throw new Error('Version mismatch');
+            const encSec=data.slice(1,24);
+            const salt=data.slice(24,29);
+            const { encryptionKey, macKey } = await deriveCipherSeedKeys(pass, salt);
+            const secret=applyCipherSeedStreamCipher(new Uint8Array(encSec), encryptionKey, salt);
+            const bBytes=secret.slice(0,2);
+            const entropy=secret.slice(2,18);
+            const recvMac=secret.slice(18);
+            if(!timingSafeEqual(recvMac, generateCipherSeedMac(version,bBytes,entropy,salt,macKey))) throw new Error('MAC failed');
+            return { version, birthday: Number(leBytesToU64(bBytes)), entropy, salt };
+          }
+          
+          // Mnemonic functions
+          function bytesToMnemonic(b) {
+            if (!(b instanceof Uint8Array)) b = new Uint8Array(b);
+            
+            const bits = [];
+            b.forEach((byte) => {
+              for(let j = 0; j < 8; j++) {
+                bits.push((byte >> j) & 1);
+              }
+            });
+            
+            const group_bit_count = 11;
+            let padded_size = Math.floor(bits.length / group_bit_count);
+            if (bits.length % group_bit_count > 0) padded_size += 1;
+            padded_size *= group_bit_count;
+            
+            while (bits.length < padded_size) bits.push(false);
+            
+            const words = [];
+            for (let i = 0; i < Math.floor(bits.length / group_bit_count); i++) {
+              const start_index = i * group_bit_count;
+              const stop_index = start_index + group_bit_count;
+              const slice = bits.slice(start_index, stop_index);
+              
+              let wordIndex = 0;
+              for (let j = 0; j < slice.length; j++) {
+                if (slice[j]) wordIndex |= (1 << j);
+              }
+              
+              words.push(wordlistEnglish[wordIndex]);
+            }
+            
+            return words.join(' ');
+          }
+
+          function mnemonicToBytes(mnemonic) {
+            const words = mnemonic.split(' ');
+            if (words.length !== 24) throw new Error('24 words required');
+            
+            const bits = [];
+            words.forEach((word) => {
+              const wordIndex = wordlistEnglish.indexOf(word);
+              if (wordIndex < 0) throw new Error(`Invalid word: ${word}`);
+              
+              for (let j = 0; j < 11; j++) {
+                bits.push((wordIndex >> j) & 1);
+              }
+            });
+            
+            const bytes = [];
+            for (let i = 0; i < bits.length; i += 8) {
+              let byte = 0;
+              for (let j = 0; j < 8 && i + j < bits.length; j++) {
+                if (bits[i + j]) byte |= (1 << j);
+              }
+              bytes.push(byte);
+            }
+            
+            return new Uint8Array(bytes.slice(0, 33));
+          }
+
+          // Address functions
+          function computeDammChecksum(data) {
+            const MASK = 27; // 0x1B
+            let result = 0;
+            
+            for (let digit of data) {
+              result ^= digit;
+              let overflow = (result & 0x80) !== 0;
+              result = (result << 1) & 0xFF;
+              if (overflow) result ^= MASK;
+            }
+            
+            return result;
+          }
+
+          function createDualAddress(net, features, pubViewKey, pubSpendKey, paymentIdData = null) {
+            // Build address: network + features + view_key + spend_key + payment_id_data
+            let addressBytesForChecksum = concatBytes(
+              new Uint8Array([net, features]),
+              pubViewKey,
+              pubSpendKey
+            );
+            
+            // If payment ID data is provided, append it directly
+            if (paymentIdData && paymentIdData.length > 0) {
+              addressBytesForChecksum = concatBytes(addressBytesForChecksum, paymentIdData);
+            }
+            
+            // Calculate checksum over everything except the checksum itself
+            const checksum = computeDammChecksum(addressBytesForChecksum);
+            
+            // Final address = address_data + checksum
+            return concatBytes(addressBytesForChecksum, new Uint8Array([checksum]));
+          }
+
+          function tariAddressToBase58(finalAddressBytes) {
+            const byte0B58 = bs58encode(new Uint8Array([finalAddressBytes[0]]));
+            const byte1B58 = bs58encode(new Uint8Array([finalAddressBytes[1]]));
+            const restB58 = bs58encode(finalAddressBytes.slice(2));
+            return byte0B58 + byte1B58 + restB58;
+          }
+
+          function tariAddressToEmoji(finalAddressBytes) {
+            const emojiChars = [];
+            for (let i = 0; i < finalAddressBytes.length; i++) {
+              const byteVal = finalAddressBytes[i];
+              emojiChars.push(EMOJI_MAP[byteVal]);
+            }
+            return emojiChars.join('');
+          }
+          
+          async function generateNewCipherSeed() {
+            const entropy = await generateRandomBytes(16);
+            const salt = await generateRandomBytes(5);
+            const birthday = Math.floor((Date.now()/1000-BIRTHDAY_GENESIS_FROM_UNIX_EPOCH)/SECONDS_PER_DAY)&0xFFFF;
+            
+            return { 
+              version: CIPHER_SEED_VERSION, 
+              birthday, 
+              entropy, 
+              salt 
+            };
+          }
+
+          function clearOutputs() {
+            document.getElementById('privateViewKeyOutput').value = '';
+            document.getElementById('publicViewKeyOutput').value = '';
+            document.getElementById('publicSpendKeyOutput').value = '';
+            document.getElementById('tariAddressOutput').value = '';
+            document.getElementById('emojiAddressOutput').value = '';
+          }
+
+          function updateAddress() {
+            if (!currentAddressData) return;
+            
+            const paymentId = document.getElementById('paymentId').value.trim();
+            let paymentIdData = null;
+            let features = TARI_ADDRESS_FEATURES_ONE_SIDED;
+            
+            if (paymentId) {
+              // Check if it looks like a hex string (even length, only hex chars)
+              if (/^[0-9a-fA-F]+$/.test(paymentId) && paymentId.length % 2 === 0) {
+                try {
+                  paymentIdData = hexToBytes(paymentId);
+                } catch (e) {
+                  // If hex parsing fails, treat as UTF-8
+                  paymentIdData = textToBytes(paymentId);
+                }
+              } else {
+                // Treat as UTF-8 string
+                paymentIdData = textToBytes(paymentId);
+              }
+              features |= TARI_ADDRESS_FEATURES_PAYMENT_ID;
+            }
+            
+            const finalAddressBytes = createDualAddress(
+              currentAddressData.net, 
+              features, 
+              currentAddressData.pubViewKey, 
+              currentAddressData.pubSpendKey, 
+              paymentIdData
+            );
+            
+            const base58Address = tariAddressToBase58(finalAddressBytes);
+            const emojiAddress = tariAddressToEmoji(finalAddressBytes);
+            
+            document.getElementById('tariAddressOutput').value = base58Address;
+            document.getElementById('emojiAddressOutput').value = emojiAddress;
+          }
+
+          function setOutputs(kViewBytes, pubViewKey, pubSpendKey, words, net) {
+            document.getElementById('privateViewKeyOutput').value = bytesToHex(kViewBytes);
+            document.getElementById('publicViewKeyOutput').value = bytesToHex(pubViewKey);
+            document.getElementById('publicSpendKeyOutput').value = bytesToHex(pubSpendKey);
+            document.getElementById('seedWords').value = words;
+            
+            // Store current address data for payment ID updates
+            currentAddressData = {
+              net,
+              pubViewKey,
+              pubSpendKey
+            };
+            
+            // Update address with current payment ID
+            updateAddress();
+          }
+        
+          async function generateTariAddress() {
+            document.getElementById('errorMessage').textContent = '';
+            clearOutputs();
+            
+            try {
+              const net = parseInt(document.getElementById('network').value);
+              
+              const seed = await generateNewCipherSeed();
+              const data33 = await encipherCipherSeed(seed, DEFAULT_CIPHER_SEED_PASSPHRASE);
+              const words = bytesToMnemonic(data33);
+              
+              // Use seed entropy directly as master key (16 bytes)
+              const masterKey = seed.entropy;
+              
+              // Derive keys using KeyManager approach
+              const kSpendScalar = keyManagerDomainSeparatedHash("derive_key", masterKey, "comms", 0);
+              const kSpendBytes = scalarToBytes(kSpendScalar);
+              const kViewScalar = keyManagerDomainSeparatedHash("derive_key", masterKey, "data encryption", 0);
+              const kViewBytes = scalarToBytes(kViewScalar);
+              
+              // Derive Public Keys
+              const pubSpendKey = RistrettoPoint.BASE.multiply(kSpendScalar).toRawBytes();
+              const pubViewKey = RistrettoPoint.BASE.multiply(kViewScalar).toRawBytes();
+              
+              setOutputs(kViewBytes, pubViewKey, pubSpendKey, words, net);
+              
+            } catch(e) {
+              console.error('Generation error:', e);
+              document.getElementById('errorMessage').textContent = 'Error: ' + e.message;
+            }
+          }
+
+          async function restoreTariAddress() {
+            document.getElementById('errorMessage').textContent = '';
+            clearOutputs();
+            
+            try {
+              const words = document.getElementById('seedWords').value.trim();
+              if (!words) {
+                throw new Error('Please enter seed words to restore');
+              }
+              
+              const net = parseInt(document.getElementById('network').value);
+              
+              const data33 = mnemonicToBytes(words);
+              const seed = await decipherCipherSeed(data33, DEFAULT_CIPHER_SEED_PASSPHRASE);
+              
+              // Use seed entropy directly as master key (16 bytes)
+              const masterKey = seed.entropy;
+              
+              // Derive keys using KeyManager approach
+              const kSpendScalar = keyManagerDomainSeparatedHash("derive_key", masterKey, "comms", 0);
+              const kSpendBytes = scalarToBytes(kSpendScalar);
+              const kViewScalar = keyManagerDomainSeparatedHash("derive_key", masterKey, "data encryption", 0);
+              const kViewBytes = scalarToBytes(kViewScalar);
+              
+              // Derive Public Keys
+              const pubSpendKey = RistrettoPoint.BASE.multiply(kSpendScalar).toRawBytes();
+              const pubViewKey = RistrettoPoint.BASE.multiply(kViewScalar).toRawBytes();
+              
+              setOutputs(kViewBytes, pubViewKey, pubSpendKey, words, net);
+              
+            } catch(e) {
+              console.error('Restoration error:', e);
+              document.getElementById('errorMessage').textContent = 'Error: ' + e.message;
+            }
+          }
+        
+          // Enable buttons and hide init message
+          document.getElementById('btnGenerate').disabled = false;
+          document.getElementById('btnRestore').disabled = false;
+          document.getElementById('initMessage').style.display = 'none';
+          
+          document.getElementById('btnGenerate').addEventListener('click', generateTariAddress);
+          document.getElementById('btnRestore').addEventListener('click', restoreTariAddress);
+          
+          // Add payment ID input listener
+          document.getElementById('paymentId').addEventListener('input', updateAddress);
+          document.getElementById('network').addEventListener('change', updateAddress);
+          
+          console.log('Tari Address Generator initialized successfully');
+        } catch (error) {
+          console.error('Failed to initialize Tari Generator:', error);
+          document.getElementById('errorMessage').textContent = 'Failed to initialize: ' + error.message;
+          document.getElementById('initMessage').textContent = 'Initialization failed. Please refresh the page.';
+        }
+      };
+    </script>
+
+    <script src="argon2-bundled.min.js" onload="initTariGenerator()"></script>
+</body>
+</html>
