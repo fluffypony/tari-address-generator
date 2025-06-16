@@ -1,3 +1,5 @@
+# NB: THERE IS AN EDGE-CASE BUG IN THIS THAT WE ARE FIXING, PLEASE DO NOT USE THIS YET!
+
 # Tari Address Generator
 
 A browser‑based tool for creating and restoring Tari wallet addresses in multiple human‑friendly encodings. Runs completely client‑side and ships in both **online** and **offline** variants.
